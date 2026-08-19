@@ -39,17 +39,28 @@ const REQUIRED_FIELDS = ['dob', 'gender', 'id_number', 'name'];
 const EXPECTED_LIMB_BITS = 121;
 const EXPECTED_LIMB_COUNT = 17;
 
+// Fixed signed-payload width the circuit is built for. Hardcoded here for the
+// same reason as the limb geometry: this script must catch the signer drifting
+// from the circuit's expectations, so it cannot read the expectation from the
+// files it is checking.
+const PAYLOAD_FIXED_BYTES = 119;
+const PAD_CHAR = ' '; // 0x20
+const EXPECTED_SHA256_BLOCKS = 2;
+
 // =============================================================================
 // Independent re-implementation of the canonical serialization
 // =============================================================================
 
 /**
- * Rebuilds the canonical byte string from a payload object, per the format
+ * Rebuilds the signed byte string from a payload object, per the format
  * documented in README.md: keys sorted ascending, JSON.stringify with no space
- * argument, UTF-8 encoded.
+ * argument, UTF-8 encoded, then padded with trailing 0x20 to a fixed 119 bytes.
+ *
+ * Independently reimplemented rather than imported, so that a divergence between
+ * the documented format and sign_credential.js surfaces as a failure here.
  *
  * @param {object} payload The payload object read from signed_credential.json
- * @returns {string} The canonical serialization
+ * @returns {string} The padded, signed serialization
  */
 function canonicalSerialize(payload) {
   const sortedKeys = Object.keys(payload).sort();
@@ -57,7 +68,12 @@ function canonicalSerialize(payload) {
   for (const key of sortedKeys) {
     ordered[key] = payload[key];
   }
-  return JSON.stringify(ordered);
+  const canonical = JSON.stringify(ordered);
+  const length = Buffer.byteLength(canonical, 'utf8');
+  if (length > PAYLOAD_FIXED_BYTES) {
+    throw new Error(`Canonical payload is ${length} bytes, over the ${PAYLOAD_FIXED_BYTES}-byte width.`);
+  }
+  return canonical + PAD_CHAR.repeat(PAYLOAD_FIXED_BYTES - length);
 }
 
 /**
@@ -345,6 +361,32 @@ function main() {
       'message_bytes and declared lengths match the serialized payload',
       `${messageBytes.length} bytes, declared ${ci.payload_byte_length} bytes / ` +
         `${ci.payload_bit_length} bits, ${ci.sha256_block_count} SHA-256 block(s)`
+    );
+
+    // 12. The padding is inside the signature, so it is part of what must be
+    //     verified -- not cosmetic. Checks the fixed width, that the tail really
+    //     is all 0x20, that the unpadded prefix still round-trips as JSON, and
+    //     that SHA-256 stays at two blocks.
+    const canonicalLength = ci.padding?.canonical_byte_length;
+    const tail = reserializedBytes.subarray(canonicalLength);
+    const tailAllSpaces = tail.every((b) => b === 0x20);
+    let roundTrips = false;
+    try {
+      const head = reserializedBytes.subarray(0, canonicalLength).toString('utf8');
+      roundTrips = JSON.stringify(JSON.parse(head)) === head;
+    } catch (e) {
+      roundTrips = false;
+    }
+    check(
+      reserializedBytes.length === PAYLOAD_FIXED_BYTES &&
+        tailAllSpaces &&
+        roundTrips &&
+        ci.sha256_block_count === EXPECTED_SHA256_BLOCKS &&
+        canonicalLength + tail.length === PAYLOAD_FIXED_BYTES,
+      `Padding is well-formed: ${PAYLOAD_FIXED_BYTES} bytes fixed, tail all 0x20, JSON prefix intact`,
+      `${canonicalLength} canonical + ${tail.length} pad = ${reserializedBytes.length}; ` +
+        `tail all spaces: ${tailAllSpaces}; prefix round-trips as JSON: ${roundTrips}; ` +
+        `${ci.sha256_block_count} SHA-256 block(s)`
     );
   }
 

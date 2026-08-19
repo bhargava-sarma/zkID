@@ -95,6 +95,29 @@ fails. The rule in full:
 3. `JSON.stringify(obj)` with **no `space` argument**. No whitespace is emitted anywhere:
    no space after `:` or `,`, no newlines, **no trailing newline**.
 4. The string is encoded **UTF-8** (`Buffer.from(s, 'utf8')`).
+5. The result is **padded with trailing `0x20` (space) to exactly 119 bytes**, appended after
+   the closing brace. This padded form is what gets hashed and signed, and it is what
+   `signed_credential.json`'s `serialized` field holds.
+
+### Why 119 bytes, and why spaces
+
+The circuit hardcodes both its input array length and its SHA-256 width, so the signed byte
+string must be a constant size no matter how long a name is. **119 is the largest payload that
+still fits two SHA-256 blocks**: `119 × 8 = 952` bits, and `952 + 1 + 64 = 1017 ≤ 1024`. One
+more byte forces a third block and costs roughly 31,000 extra constraints.
+
+Space padding, specifically, because:
+
+- **Trailing whitespace is legal JSON**, so the padded string still parses — no un-padding step
+  is needed to read it.
+- **Space cannot introduce a second `"dob":"`**, which matters because the circuit asserts that
+  the key occurs exactly once.
+- It stays **visible in a hex dump** rather than looking like file corruption, as trailing NULs
+  would.
+
+The padding is **inside the signature** — the issuer signs all 119 bytes. The circuit hashes
+all 119 and simply never reads the tail. `sign_credential.js` refuses to sign a canonical
+payload longer than 119 bytes rather than truncating it.
 
 ### The ASCII guard
 
@@ -108,11 +131,13 @@ fails loudly at signing time instead of silently desynchronizing the circuit.
 
 ### Current serialized bytes
 
+Canonical form, 83 bytes:
+
 ```
 {"dob":"1998-04-12","gender":"M","id_number":"000000000000","name":"Test User One"}
 ```
 
-**83 bytes / 664 bits.** Hex dump:
+Signed form — the above plus 36 trailing spaces, **119 bytes / 952 bits**:
 
 ```
 0000  7b 22 64 6f 62 22 3a 22 31 39 39 38 2d 30 34 2d  |{"dob":"1998-04-|
@@ -120,20 +145,26 @@ fails loudly at signing time instead of silently desynchronizing the circuit.
 0020  2c 22 69 64 5f 6e 75 6d 62 65 72 22 3a 22 30 30  |,"id_number":"00|
 0030  30 30 30 30 30 30 30 30 30 30 22 2c 22 6e 61 6d  |0000000000","nam|
 0040  65 22 3a 22 54 65 73 74 20 55 73 65 72 20 4f 6e  |e":"Test User On|
-0050  65 22 7d                                         |e"}|
+0050  65 22 7d 20 20 20 20 20 20 20 20 20 20 20 20 20  |e"}             |
+0060  20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20  |                |
+0070  20 20 20 20 20 20 20                             |       |
 ```
 
-SHA-256 of those bytes:
+SHA-256 of the **119 padded bytes**:
 
 ```
-14578f55489de0bcc174d9b56339094ad2379e31f7022d0f366572175d2e24ef
+66357b07e1a1353caf5fe8836d2207e2003d92e5fca40e6a98dccae2472366da
 ```
 
-> ⚠️ **83 is a function of the current values, not a constant of the format.** Change the
-> name from `Test User One` to anything of a different length and the byte count moves,
-> which moves the SHA-256 block count and the circuit's `Sha256(n)` width. This is why
-> `circuit_inputs.json` *emits* `payload_byte_length` and `payload_bit_length` rather than
-> anyone hardcoding 664. Task 2 should read them.
+> **119 is now a constant of the format, not of the values.** Changing the name changes only
+> how many pad bytes are appended, not the signed length — which is the whole point, since the
+> circuit's array width and `Sha256(n)` are compiled in and cannot vary per credential.
+> `circuit_inputs.json` still *emits* `payload_byte_length` / `payload_bit_length`, and
+> `padding.canonical_byte_length` records how much of the 119 is real content.
+>
+> The ceiling is real: non-name content is 70 bytes, so a name past **49 characters** overflows
+> 119 and `sign_credential.js` refuses to sign it. Raising the limit means crossing into three
+> SHA-256 blocks and rebuilding the circuit and trusted setup.
 
 ---
 
@@ -161,19 +192,22 @@ derived on paper.
 ### SHA-256 message padding
 
 The circuit's SHA-256 component must be sized for the *padded* message. For the current
-83-byte payload:
+119-byte padded payload:
 
 ```
-664 message bits (83 bytes)
+952 message bits (119 bytes, already space-padded)
   + 0x80                     1 byte   (the mandatory 1 bit, byte-aligned)
-  + 0x00 × 36               36 bytes  (zero padding)
-  + 0x0000000000000298       8 bytes  (message length in bits, 64-bit big-endian; 664 = 0x298)
+  + 0x00 × 0                 0 bytes  (no zero padding needed at this length)
+  + 0x00000000000003b8       8 bytes  (message length in bits, 64-bit big-endian; 952 = 0x3b8)
   ─────────────────────────────────
   = 128 bytes = 1024 bits   = 2 SHA-256 blocks
 ```
 
+Note the two distinct paddings: the **space padding to 119 bytes** is ours and is signed; the
+**SHA-256 block padding** above is the hash function's own and is not part of the message.
+
 `circomlib`'s `Sha256(nBits)` performs this padding internally — instantiate it with
-`nBits = 664` (i.e. `payload_bit_length` from `circuit_inputs.json`), not 1024.
+`nBits = 952` (i.e. `payload_bit_length` from `circuit_inputs.json`), not 1024.
 
 ### EMSA-PKCS1-v1_5 encoded message
 
@@ -218,7 +252,7 @@ two-constant edit that fails loudly rather than silently truncating. Both output
 are built in memory before either is written, so a failure there leaves **neither** file
 touched rather than pairing a fresh credential with stale circuit inputs.
 
-`circuit_inputs.json` also carries `message_bytes` (the 83 serialized bytes, one per array
+`circuit_inputs.json` also carries `message_bytes` (the 119 signed bytes, one per array
 element), `modulus_hex`, `exponent`, `payload_byte_length`, `payload_bit_length`, and
 `sha256_block_count`.
 
@@ -236,7 +270,7 @@ never `payload.json`, and it imports nothing from `sign_credential.js`. It also
 mismatch between this documented format and the signing implementation would surface as a
 failure instead of being masked by shared code. The duplication is intentional.
 
-Eleven checks, each reported separately.
+Twelve checks, each reported separately.
 
 **Credential checks (1–6)** — need only the credential and the public key:
 
@@ -248,7 +282,7 @@ Eleven checks, each reported separately.
 5. **Negative control** — a message with one flipped bit is rejected.
 6. **Negative control** — a signature with one flipped bit is rejected.
 
-**Circuit input checks (7–11)** — validate `circuit_inputs.json`:
+**Circuit input checks (7–12)** — validate `circuit_inputs.json`:
 
 7. Limb geometry is 17 × 121-bit, checked against constants hardcoded in the verifier rather
    than against the layout the file declares about itself.
@@ -258,9 +292,12 @@ Eleven checks, each reported separately.
    `modulus_hex` sitting beside them, which would only prove the file is self-consistent.
 10. Signature limbs recombine to the signature in `signed_credential.json`.
 11. `message_bytes` and the declared byte/bit lengths match the serialized payload.
+12. The padding is well-formed: exactly 119 bytes, the tail really is all `0x20`, the unpadded
+    prefix still round-trips through `JSON.parse`, and SHA-256 stays at two blocks. The padding
+    is covered by the signature, so it is verified rather than assumed.
 
 Checks 5 and 6 exist because a verifier that accepted everything would pass 1–4 just as
-happily. If `circuit_inputs.json` is absent, checks 7–11 report **SKIP** — deliberately
+happily. If `circuit_inputs.json` is absent, checks 7–12 report **SKIP** — deliberately
 distinct from PASS, so a missing file can never read as a success. Exit code is 0 only if
 every check that ran passed.
 
@@ -327,10 +364,34 @@ immediately after rotating.
 
 ---
 
-## Known gap for Task 2
+## Where this is consumed
 
-`backend/circuits/pot12_final.ptau` supports roughly 4,096 constraints. SHA-256 over two
-blocks plus RSA-2048 verification in-circuit lands in the 10⁵–10⁶ constraint range, so Task 2
-will need a much larger Powers of Tau file (pot20/pot21 or higher) and a corresponding change
-to the hardcoded ptau URL in `backend/circuits/setup_circuit.sh`. Nothing in this directory
-touches that.
+`experiments/credential-age-proof/` proves, in one circuit, that this issuer signed a payload
+**and** that the date of birth inside those signed bytes clears an age threshold. It reads
+`circuit_inputs.json` directly.
+
+Measured on the real credential produced here:
+
+| | |
+|---|---|
+| Constraints | 256,574 |
+| ptau | pot19 (pot18 also fits, with 2.1% headroom) |
+| Proving | ~3.6 s |
+| Verification | `OK!` |
+
+The earlier estimate in this file — that a composed circuit would need pot20/pot21 — was
+wrong by roughly a factor of four. It assumed 64×32 limbs and a naive per-byte extraction
+scan; the measured design uses 121×17 limbs and a single `VarShiftLeft` pass, which together
+cost far less. The old note has been removed rather than left to mislead.
+
+**Not yet wired into `backend/`.** The pipeline in the root README still trusts server-computed
+values; nothing there calls this circuit. `backend/circuits/pot12_final.ptau` remains correct
+for the small standalone Age/Name/Gender circuits, which is all it is used for.
+
+## Related: the age check this feeds
+
+The standalone `AgeVerification` circuit in `backend/circuits/` was rewritten to compare
+encoded dates (`year*10000 + month*100 + day`) rather than days since the epoch. That fixed a
+real defect: the old threshold was a hardcoded `6570` days (18 × 365), four days lenient
+because it ignored leap days. The composed circuit here uses the same encoding, so the two
+agree on what "old enough" means.

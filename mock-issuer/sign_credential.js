@@ -26,6 +26,12 @@ const path = require('path');
 
 const REQUIRED_FIELDS = ['dob', 'gender', 'id_number', 'name'];
 
+// Fixed signed-payload width. The circuit's byte array and SHA-256 instance are
+// both sized to this constant, so it cannot vary per credential. 119 is the
+// largest value that keeps SHA-256 at two blocks. See padToFixedLength.
+const PAYLOAD_FIXED_BYTES = 119;
+const PAD_CHAR = ' '; // 0x20
+
 // RSA-2048 -> 256-byte signature and 256-byte modulus, split into limbs for
 // Circom bigint arithmetic. 121 x 17 = 2057 bits, matching RSAVerifier65537(121, 17)
 // from @zk-email/circuits.
@@ -117,7 +123,7 @@ function validatePayload(payload) {
 // =============================================================================
 
 /**
- * Serializes the payload to the exact byte string that gets hashed and signed.
+ * Serializes the payload to its canonical form, before padding.
  *
  * The rule, in full:
  *   1. The object has exactly the four permitted keys, no others.
@@ -141,6 +147,42 @@ function serializePayload(payload) {
     ordered[key] = payload[key];
   }
   return JSON.stringify(ordered);
+}
+
+/**
+ * Pads the canonical serialization to the fixed width the circuit is built for.
+ *
+ * The circuit hardcodes its input array length and its SHA-256 width, so the
+ * signed byte string must be a constant size regardless of how long the name or
+ * other values are. 119 bytes is the largest payload that still fits two
+ * SHA-256 blocks: 119*8 = 952 bits, and 952 + 1 + 64 = 1017 <= 1024. One more
+ * byte forces a third block and costs ~31k extra constraints.
+ *
+ * Padding is trailing 0x20 (space) appended AFTER the closing brace. Three
+ * properties make this the right choice:
+ *   - Trailing whitespace is legal JSON, so the padded string still parses.
+ *   - Space cannot introduce a second `"dob":"` occurrence, which the circuit's
+ *     uniqueness scan asserts against.
+ *   - It is printable, so it stays visible in a hex dump rather than looking
+ *     like file corruption the way trailing NULs would.
+ *
+ * The padding is inside the signature: the issuer signs all 119 bytes. The
+ * circuit hashes all 119 bytes and simply never looks at the tail.
+ *
+ * @param {string} serialized The canonical serialization
+ * @returns {string} Exactly PAYLOAD_FIXED_BYTES bytes
+ * @throws {Error} If the canonical form already exceeds the fixed width
+ */
+function padToFixedLength(serialized) {
+  const length = Buffer.byteLength(serialized, 'utf8');
+  if (length > PAYLOAD_FIXED_BYTES) {
+    throw new Error(
+      `Canonical payload is ${length} bytes, over the ${PAYLOAD_FIXED_BYTES}-byte fixed width. ` +
+        'Shorten a field value, or rebuild the circuit for a larger width (note that going ' +
+        'past 119 bytes forces a third SHA-256 block).'
+    );
+  }
+  return serialized + PAD_CHAR.repeat(PAYLOAD_FIXED_BYTES - length);
 }
 
 // =============================================================================
@@ -226,11 +268,18 @@ function main() {
   validatePayload(payload);
   console.log('[SIGN] Payload validated: 4 fields, printable ASCII, no escape sequences');
 
-  // ---- Serialize ----------------------------------------------------------
-  const serialized = serializePayload(payload);
+  // ---- Serialize and pad --------------------------------------------------
+  // `serialized` below is the PADDED form: it is what gets hashed and signed,
+  // which is what signed_credential.json's `serialized` field has always meant.
+  const canonical = serializePayload(payload);
+  const serialized = padToFixedLength(canonical);
   const serializedBytes = Buffer.from(serialized, 'utf8');
-  console.log(`[SIGN] Serialized: ${serializedBytes.length} bytes / ${serializedBytes.length * 8} bits`);
-  console.log(`[SIGN] ${serialized}`);
+  console.log(`[SIGN] Canonical: ${Buffer.byteLength(canonical, 'utf8')} bytes`);
+  console.log(`[SIGN] ${canonical}`);
+  console.log(
+    `[SIGN] Padded:    ${serializedBytes.length} bytes / ${serializedBytes.length * 8} bits ` +
+      `(+${PAYLOAD_FIXED_BYTES - Buffer.byteLength(canonical, 'utf8')} x 0x20)`
+  );
 
   // ---- Hash ---------------------------------------------------------------
   const sha256Hex = crypto.createHash('sha256').update(serializedBytes).digest('hex');
@@ -295,11 +344,17 @@ function main() {
       order: 'least-significant-limb-first',
       encoding: 'decimal string (values exceed Number.MAX_SAFE_INTEGER)',
     },
-    // Emitted rather than hardcoded: these change if the payload values change,
-    // and the circuit's Sha256(n) width must follow them.
+    // Fixed by PAYLOAD_FIXED_BYTES, not by the payload contents - the circuit's
+    // input array and Sha256(n) width are both built to these constants.
     payload_byte_length: serializedBytes.length,
     payload_bit_length: serializedBytes.length * 8,
     sha256_block_count: Math.ceil((serializedBytes.length * 8 + 1 + 64) / 512),
+    padding: {
+      scheme: 'trailing 0x20 (space) appended after the closing brace',
+      canonical_byte_length: Buffer.byteLength(canonical, 'utf8'),
+      pad_byte_count: PAYLOAD_FIXED_BYTES - Buffer.byteLength(canonical, 'utf8'),
+      note: 'padding is covered by the signature; the circuit hashes it and ignores it',
+    },
     modulus_hex: modulusBytes.toString('hex'),
     exponent,
     modulus_limbs: toLimbs(modulusBigInt, LIMB_BITS, LIMB_COUNT),
