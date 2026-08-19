@@ -320,12 +320,23 @@ function ProofStep({ userId, userName, onProofComplete, onStartOver }) {
                 {activeTab === 'age' && (
                   <>
                     <div className="proof-attribute">
-                      <div className="proof-attribute-label">Today (days since epoch)</div>
-                      <div className="proof-attribute-value">{currentResult.todayDays || '—'}</div>
+                      <div className="proof-attribute-label">
+                        Threshold date (public signal)
+                      </div>
+                      <div className="proof-attribute-value">
+                        {currentResult.thresholdDate || '—'}
+                      </div>
                     </div>
                     <div className="proof-attribute">
-                      <div className="proof-attribute-label">Threshold (days)</div>
-                      <div className="proof-attribute-value">{currentResult.thresholdDays || '—'}</div>
+                      <div className="proof-attribute-label">
+                        Derived from (not a public signal)
+                      </div>
+                      <div className="proof-attribute-value">
+                        {currentResult.todayDate || '—'}
+                        {currentResult.minimumAgeYears
+                          ? ` − ${currentResult.minimumAgeYears}y`
+                          : ''}
+                      </div>
                     </div>
                   </>
                 )}

@@ -20,7 +20,10 @@ module.exports = {
       gasPrice: "auto"
     },
     amoy: {
-      url: "https://rpc-amoy.polygon.technology",
+      // Overridable because the official endpoint has been unreliable — it was
+      // returning nothing at all during the v2 verifier deploy. Same pattern as
+      // polygonCardona above. Any Amoy (chainId 80002) RPC works.
+      url: process.env.AMOY_RPC_URL || "https://rpc-amoy.polygon.technology",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 80002,
       gasPrice: "auto"

@@ -24,9 +24,9 @@ function StorageStep({ data, onNext }) {
           <span className="storage-value">{stored.name}</span>
         </div>
         <div className="storage-row">
-          <span className="storage-key">dob_days</span>
+          <span className="storage-key">dob_encoded</span>
           <span className="storage-value">
-            {stored.dob_days === '[protected]' ? <span className="redacted">[protected]</span> : stored.dob_days}
+            {stored.dob_encoded === '[protected]' ? <span className="redacted">[protected]</span> : stored.dob_encoded}
           </span>
         </div>
         <div className="storage-row">

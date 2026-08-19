@@ -59,25 +59,53 @@ async function runProof(input, wasmPath, zkeyPath, vkeyPath, tag) {
 // =============================================
 // Age Proof
 // =============================================
-async function generateProof(dobDays) {
+const MINIMUM_AGE_YEARS = 18;
+
+/**
+ * Latest date of birth that still qualifies, as year*10000 + month*100 + day.
+ *
+ * Computed by subtracting the age from the year component directly, with no date
+ * arithmetic. That is deliberate: the previous implementation used a constant
+ * thresholdDays = 6570 (18 * 365), which ignored leap days and ran four days
+ * lenient — someone four days short of eighteen verified as an adult.
+ *
+ * Doing it as pure integer arithmetic also sidesteps the Feb 29 trap. Building a
+ * Date for Feb 29 in a non-leap year silently rolls over to Mar 1; here, a Feb 29
+ * "today" yields an encoded threshold of e.g. 20080229, which compares correctly
+ * against real dates on either side of it whether or not that date exists.
+ *
+ * @param {Date} [now] Reference date; defaults to today. Injectable for tests.
+ * @returns {number} Encoded threshold date
+ */
+function computeThresholdDate(now = new Date()) {
+  const year = now.getUTCFullYear() - MINIMUM_AGE_YEARS;
+  const month = now.getUTCMonth() + 1;
+  const day = now.getUTCDate();
+  return year * 10000 + month * 100 + day;
+}
+
+async function generateProof(dobEncoded) {
   const vkeyPath = fs.existsSync(AGE_VKEY) ? AGE_VKEY : AGE_VKEY_LEGACY;
   checkArtifacts(AGE_WASM, AGE_ZKEY, vkeyPath, 'AgeVerification');
 
   const now = new Date();
-  const todayMs = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayDays = Math.floor(todayMs / (1000 * 60 * 60 * 24));
-  const thresholdDays = 6570; // 18 * 365
+  const thresholdDate = computeThresholdDate(now);
+  // Not a public signal, and not an input to the circuit — reported only so the
+  // UI can show which day the threshold was derived from.
+  const todayDate =
+    now.getUTCFullYear() * 10000 + (now.getUTCMonth() + 1) * 100 + now.getUTCDate();
 
-  const input = { dobDays, todayDays, thresholdDays };
-  console.log(`[PROOF:AGE] todayDays: ${todayDays}, threshold: ${thresholdDays}`);
+  const input = { dobEncoded, thresholdDate };
+  console.log(`[PROOF:AGE] today: ${todayDate}, threshold: ${thresholdDate} (${MINIMUM_AGE_YEARS}y)`);
 
   try {
     const result = await runProof(input, AGE_WASM, AGE_ZKEY, vkeyPath, 'AGE');
     return {
       ...result,
-      message: result.isValid ? 'AGE_OVER_18: VERIFIED' : 'VERIFICATION FAILED',
-      todayDays,
-      thresholdDays,
+      message: result.isValid ? `AGE_OVER_${MINIMUM_AGE_YEARS}: VERIFIED` : 'VERIFICATION FAILED',
+      thresholdDate,
+      todayDate,
+      minimumAgeYears: MINIMUM_AGE_YEARS,
     };
   } catch (err) {
     console.log(`[PROOF:AGE] Generation FAILED: ${err.message}`);
@@ -140,4 +168,4 @@ async function generateGenderProof(genderCode, claimedGender) {
   }
 }
 
-module.exports = { generateProof, generateNameProof, generateGenderProof };
+module.exports = { generateProof, generateNameProof, generateGenderProof, computeThresholdDate };

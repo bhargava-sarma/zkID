@@ -32,11 +32,12 @@ function preprocessData(name, dobString, aadhaarNumber, gender) {
   const isoDate = `${year}-${month}-${day}`;
   console.log(`[PREPROCESS] DOB normalized — year: ${year}`);
 
-  // Step 2: Convert DOB to integer days since Unix epoch (Jan 1, 1970)
-  const dobDate = new Date(isoDate);
-  const epochMs = dobDate.getTime();
-  const dobDays = Math.floor(epochMs / (1000 * 60 * 60 * 24));
-  console.log(`[PREPROCESS] DOB converted to epoch days: ${dobDays}`);
+  // Step 2: Encode DOB as a single comparable integer: year*10000 + month*100 + day.
+  // Integer ordering on this encoding is chronological ordering on the date, so
+  // the age circuit needs one comparison and no date arithmetic. This replaced
+  // days-since-epoch, whose 18*365 threshold ignored leap days.
+  const dobEncoded = Number(year) * 10000 + Number(month) * 100 + Number(day);
+  console.log(`[PREPROCESS] DOB encoded: ${dobEncoded}`);
 
   // Step 3: Hash Aadhaar number with SHA-256
   const aadhaarClean = aadhaarNumber.replace(/\s/g, '');
@@ -60,7 +61,7 @@ function preprocessData(name, dobString, aadhaarNumber, gender) {
     name,
     rawDob: dobString,
     isoDate,
-    dobDays,
+    dobEncoded,
     aadhaarHash,
     nameHash,
     gender: genderLabel,
@@ -78,10 +79,10 @@ function preprocessData(name, dobString, aadhaarNumber, gender) {
         explanation: 'Converted to ISO 8601 format for standardized processing',
       },
       {
-        label: 'Days Since Unix Epoch',
-        value: `${dobDays} days`,
+        label: 'Encoded Date (YYYYMMDD)',
+        value: `${dobEncoded}`,
         explanation:
-          'Integer representation compatible with arithmetic circuits. This is the private input to the Age ZK circuit.',
+          'Date encoded as year*10000 + month*100 + day, so integer comparison is chronological comparison. This is the private input to the Age ZK circuit.',
       },
       {
         label: 'Aadhaar SHA-256 Hash',

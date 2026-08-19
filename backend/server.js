@@ -68,7 +68,7 @@ app.post('/api/upload', upload.single('aadhaar'), async (req, res) => {
     // Step 3: Store in Supabase
     const storedUser = await storeUser(
       processed.name,
-      processed.dobDays,
+      processed.dobEncoded,
       processed.aadhaarHash,
       processed.nameHash,
       processed.genderCode
@@ -90,7 +90,7 @@ app.post('/api/upload', upload.single('aadhaar'), async (req, res) => {
       stored: {
         id: storedUser.id,
         name: storedUser.name,
-        dob_days: '[protected]',
+        dob_encoded: '[protected]',
         aadhaar_hash: storedUser.aadhaar_hash ? storedUser.aadhaar_hash.substring(0, 8) + '...' : null,
         name_hash: storedUser.name_hash ? storedUser.name_hash.substring(0, 8) + '...' : null,
         gender_code: storedUser.gender_code !== null && storedUser.gender_code !== undefined ? '[protected]' : null,
@@ -123,15 +123,16 @@ app.post('/api/generate-proof', async (req, res) => {
     const user = await getUserById(userId);
     if (!user) return res.status(404).json({ error: 'User not found.' });
 
-    const result = await generateProof(user.dob_days);
+    const result = await generateProof(user.dob_encoded);
 
     res.json({
       proof: result.proof,
       publicSignals: result.publicSignals,
       isValid: result.isValid,
       message: result.message,
-      todayDays: result.todayDays,
-      thresholdDays: result.thresholdDays,
+      thresholdDate: result.thresholdDate,
+      todayDate: result.todayDate,
+      minimumAgeYears: result.minimumAgeYears,
       proofDuration: result.proofDuration,
       verificationDuration: result.verificationDuration,
     });
@@ -221,7 +222,7 @@ app.post('/api/demo', async (req, res) => {
 
     try {
       const storedUser = await storeUser(
-        processed.name, processed.dobDays, processed.aadhaarHash,
+        processed.name, processed.dobEncoded, processed.aadhaarHash,
         processed.nameHash, processed.genderCode
       );
 
@@ -246,7 +247,7 @@ app.post('/api/demo', async (req, res) => {
         stored: {
           id: storedUser.id,
           name: storedUser.name,
-          dob_days: '[protected]',
+          dob_encoded: '[protected]',
           aadhaar_hash: storedUser.aadhaar_hash ? storedUser.aadhaar_hash.substring(0, 8) + '...' : null,
           name_hash: storedUser.name_hash ? storedUser.name_hash.substring(0, 8) + '...' : null,
           gender_code: storedUser.gender_code !== null && storedUser.gender_code !== undefined ? '[protected]' : null,
@@ -272,7 +273,7 @@ app.post('/api/demo', async (req, res) => {
 
     try {
       const storedUser = await storeUser(
-        processed.name, processed.dobDays, processed.aadhaarHash,
+        processed.name, processed.dobEncoded, processed.aadhaarHash,
         processed.nameHash, processed.genderCode
       );
 
@@ -297,7 +298,7 @@ app.post('/api/demo', async (req, res) => {
         stored: {
           id: storedUser.id,
           name: storedUser.name,
-          dob_days: '[protected]',
+          dob_encoded: '[protected]',
           aadhaar_hash: storedUser.aadhaar_hash ? storedUser.aadhaar_hash.substring(0, 8) + '...' : null,
           name_hash: storedUser.name_hash ? storedUser.name_hash.substring(0, 8) + '...' : null,
           gender_code: storedUser.gender_code !== null && storedUser.gender_code !== undefined ? '[protected]' : null,
