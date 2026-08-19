@@ -4,7 +4,21 @@ export const CONTRACT_ADDRESSES = {
 };
 
 export const AMOY_CHAIN_ID = 80002;
-export const AMOY_RPC = "https://rpc-amoy.polygon.technology";
+
+// Amoy JSON-RPC endpoint used for read-only on-chain verification.
+//
+// Was https://rpc-amoy.polygon.technology, which stopped resolving entirely
+// (NXDOMAIN) and surfaced in the browser as "TypeError: Failed to fetch" — the
+// request never left the machine. Overridable so the next endpoint to rot can be
+// swapped without a code change; mirrors AMOY_RPC_URL in hardhat.config.js.
+//
+// A replacement must be CORS-enabled: this runs in the browser, so an endpoint
+// that works from curl can still fail here. Verify with:
+//   curl -i -X OPTIONS <url> -H 'Origin: http://localhost:5173' \
+//        -H 'Access-Control-Request-Method: POST'
+// and look for access-control-allow-origin.
+const DEFAULT_AMOY_RPC = "https://polygon-amoy-bor-rpc.publicnode.com";
+export const AMOY_RPC = import.meta.env.VITE_AMOY_RPC_URL || DEFAULT_AMOY_RPC;
 
 // ABI from the deployed Groth16 verifier contracts (snarkjs-generated)
 // AgeVerifier: 1 public signal (thresholdDate, encoded YYYYMMDD).
