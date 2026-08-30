@@ -155,13 +155,66 @@ Verification is a read-only `view` call, so no wallet or gas is needed. To redep
 3. Client requests a proof; backend generates and verifies it with snarkjs
 4. Client optionally re-verifies the same proof on-chain
 
+### `POST /api/signed-proof` — issuer-signed path
+
+The only endpoint whose proof attests to what an **issuer** signed. Additive: the legacy
+endpoints above are untouched, and there is deliberately no fallback from this path to them —
+if a credential cannot be built or proven, it fails rather than silently downgrading to an
+unsigned proof while implying the same assurance.
+
+Accepts either a multipart `image` file (real OCR) or `{"scenario": "..."}` for the canned
+demo cases (`valid`, `underage`, `ocr_fail`, `malformed_name`, `gender_missing`, `dob_garbled`,
+`long_name`).
+
+Pipeline: OCR → canonical payload → RSA-2048 signature (mock issuer, at request time) →
+composed proof → local verification. Roughly 4 seconds; see the limitation note below.
+
+**Failure modes.** Three outcomes, distinguished because they need different user actions:
+
+| `code` | HTTP | `retryable` | Meaning |
+|---|---|---|---|
+| `CREDENTIAL_UNPROCESSABLE` | 422 | `true` | OCR output cannot form a valid credential — retake the photo |
+| `AGE_REQUIREMENT_NOT_MET` | 422 | `false` | The credential is valid; the subject is under age. Retaking will not help |
+| `PROVING_UNAVAILABLE` | 500 | `false` | Missing artifacts or key. Operator problem, not the user's |
+
+The body carries a machine-readable `reason` (`dob_format`, `gender_missing`,
+`id_number_format`, `name_invalid_chars`, `payload_too_long`, …) and a `stages[]` array showing
+exactly where it stopped. The raw guard message — which quotes field contents — goes to the
+server log only, never to the client.
+
+**Gender is never defaulted.** If OCR does not detect it, the request fails. Defaulting to `O`
+would put a fabricated claim inside an issuer-attested credential.
+
+**Raw ID handling.** The canonical format requires 12 literal digits, so the raw number is
+needed to build the payload — a hash cannot substitute. It exists only in memory and inside the
+signed bytes, which are a **private** circuit input. It is never logged (only `********9012`),
+never written to disk, and never sent to the database — this endpoint performs no DB write.
+Verified: zero occurrences of the raw value in server logs or the response body.
+
 ## 7) Known limitations
 
 This is a demonstration, not production KYC:
 
 - `GenderVerifier` is compiled but not deployed, so gender proofs verify locally only
 - OCR field extraction is regex-based against a specific Aadhaar layout and is sensitive to image quality
-- The name/gender circuits prove equality against a hash the server computes, so they demonstrate the ZK pattern rather than a full trustless attestation. `mock-issuer/` and `experiments/` address exactly this gap for the age path, but that work is **not yet wired into this pipeline** — see below.
+- **Two endpoints, two different guarantees.** `/api/upload` and `/api/generate-proof` prove
+  facts about values **this server computed** from OCR — a proof there says "the server's
+  stored value satisfies the predicate", not "an issuer attested to this". `/api/signed-proof`
+  is the stronger path: it signs a credential at request time and proves, in one circuit, that
+  the issuer signed a payload *and* that the date inside those signed bytes clears the age
+  threshold. The legacy endpoints are unchanged and still work; do not read the stronger
+  guarantee onto them.
+- The name/gender circuits prove equality against a hash the server computes, so they
+  demonstrate the ZK pattern rather than a full trustless attestation.
+- **Calendar correctness is not validated.** The age circuit range-checks each date digit to
+  0–9 and the signer enforces the `YYYY-MM-DD` shape, but neither checks that the date exists.
+  A month/day misread from OCR that stays within those digit ranges — `1990-13-45`, say —
+  passes every guard and gets signed as a valid credential. Deliberately out of scope for now;
+  closing it needs real calendar validation in the signer.
+- **Composed proofs are slow.** `/api/signed-proof` takes roughly **4 seconds** end to end
+  (~3.6–4.3s proving) against ~0.2s for the legacy age circuit — it is a 256,574-constraint
+  circuit rather than 37. Any UI calling it needs a real loading state, not a spinner that
+  looks hung. `mock-issuer/` and `experiments/` address exactly this gap for the age path, but that work is **not yet wired into this pipeline** — see below.
 
 ### Fixed since the first version
 
@@ -174,12 +227,22 @@ This is a demonstration, not production KYC:
 
 ### Not yet integrated
 
-`mock-issuer/` produces an RSA-2048 signed credential and `experiments/credential-age-proof/`
-proves, in a single circuit, that an issuer signed a payload **and** that the date of birth inside
-those signed bytes clears an age threshold — the trustless attestation the bullet above says is
-missing. It is validated standalone (256,574 constraints, ~3.6 s proving) but nothing in
-`backend/` calls it yet. The pipeline described in this README still trusts server-computed
-values.
+`POST /api/signed-proof` now wires this together end to end: OCR fields → canonical payload →
+RSA-2048 signature (mock issuer, at request time) → composed proof (RSA verify + in-circuit
+`"dob":"` extraction + age comparison) → local verification. It reuses the guards, byte format
+and limb decomposition from `mock-issuer/sign_credential.js` rather than reimplementing them,
+so there is one implementation of the byte contract.
+
+Still outstanding:
+
+- **The frontend does not call it yet.** No UI change has been made.
+- **On-chain verification is not wired for this circuit.** The deployed `AgeVerifier` is for the
+  small standalone age circuit and takes different public signals; a composed-circuit verifier
+  has not been generated or deployed.
+- **Proving artifacts live in `experiments/`.** The endpoint references
+  `experiments/credential-age-proof/cap_final.zkey` (128 MB, gitignored) rather than a copy under
+  `backend/`. Deliberate for now — moving 128 MB was not worth doing before the shape settles.
+- Nothing is persisted by this endpoint: it performs no database write.
 
 ## 8) Troubleshooting
 

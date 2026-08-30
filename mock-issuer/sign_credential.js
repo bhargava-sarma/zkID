@@ -381,11 +381,30 @@ function main() {
   console.log('[SIGN] Next: node verify_credential.js');
 }
 
-try {
-  main();
-} catch (err) {
-  // Validation and key-parsing failures are expected operator errors, not bugs.
-  // A one-line message is more useful here than a stack trace.
-  console.error(`[SIGN] ERROR: ${err.message}`);
-  process.exit(1);
+// Run the CLI only when invoked directly. When this file is required as a
+// module -- the backend signs credentials at request time from OCR output --
+// exporting the pieces means the guards and the byte format have exactly one
+// implementation, rather than a copy that can drift.
+if (require.main === module) {
+  try {
+    main();
+  } catch (err) {
+    // Validation and key-parsing failures are expected operator errors, not bugs.
+    // A one-line message is more useful here than a stack trace.
+    console.error(`[SIGN] ERROR: ${err.message}`);
+    process.exit(1);
+  }
 }
+
+module.exports = {
+  validatePayload,
+  serializePayload,
+  padToFixedLength,
+  toLimbs,
+  bufferToBigInt,
+  REQUIRED_FIELDS,
+  PAYLOAD_FIXED_BYTES,
+  PAD_CHAR,
+  LIMB_BITS,
+  LIMB_COUNT,
+};

@@ -23,12 +23,17 @@ backend/eng.traineddata
 backend/circuits/*.ptau
 
 # ---- Experiments ----
-# Deny-by-default. experiments/rsa-baseline/ holds ~800MB of regenerable binaries
-# (ptau, zkeys, r1cs, sym, witness, wasm) that must never be committed -- several
-# exceed GitHub's 100MB per-file limit on their own. Only the small source files
-# needed to reproduce the baseline are carved back in below.
+# Deny-by-default. These directories hold GBs of regenerable binaries (ptau,
+# zkeys, r1cs, sym, witness, wasm) that must never be committed -- several exceed
+# GitHub's 100MB per-file limit on their own. Only the small source files needed
+# to reproduce each experiment are carved back in below.
 # To track a new source file here, add an explicit negation; anything not listed
 # stays ignored no matter what lands in the directory.
+#
+# NOTE: credential-age-proof/ is not purely an experiment any more --
+# backend/composedproof.js requires gen_input.js from it at runtime. Omitting
+# that carve-out made a fresh clone fail to boot with "Cannot find module".
+# Source files there are load-bearing; treat them as such.
 experiments/*
 !experiments/rsa-baseline/
 experiments/rsa-baseline/*
@@ -43,6 +48,11 @@ experiments/rsa-mock-issuer/*
 !experiments/rsa-mock-issuer/README.md
 !experiments/rsa-mock-issuer/precheck_rsa.js
 !experiments/rsa-mock-issuer/gen_input_mock_issuer.js
+!experiments/credential-age-proof/
+experiments/credential-age-proof/*
+!experiments/credential-age-proof/README.md
+!experiments/credential-age-proof/gen_input.js
+!experiments/credential-age-proof/circuits/
 
 # ---- Mock issuer key material ----
 # NOT ignored, deliberately. mock-issuer/*.pem is throwaway mock signing material

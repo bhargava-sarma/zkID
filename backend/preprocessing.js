@@ -88,7 +88,11 @@ function preprocessData(name, dobString, aadhaarNumber, gender) {
         label: 'Aadhaar SHA-256 Hash',
         value: aadhaarHash.substring(0, 20) + '...',
         explanation:
-          'One-way cryptographic hash. Original Aadhaar number is irreversibly discarded after this step.',
+          'One-way cryptographic hash; only the hash is ever stored. On this path the ' +
+          'original number is discarded here. The signed-credential path ' +
+          '(/api/signed-proof) instead holds it in memory just long enough to build the ' +
+          'signed payload, where it is a private circuit input — still never logged, ' +
+          'written to disk, or stored in the database.',
       },
       {
         label: 'Name Hash (Circuit Input)',
