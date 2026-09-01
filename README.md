@@ -10,8 +10,12 @@ Proofs are Groth16 (circom + snarkjs), verified both locally and on-chain agains
 
 - Capture a KYC document image (held in memory, never written to disk)
 - Extract text via OCR (tesseract.js)
-- Transform to circuit-friendly values: DOB → days since Unix epoch, name and Aadhaar number → SHA-256 hashes, gender → integer code
-- Store **only the derived values** in Supabase; the raw Aadhaar number is discarded
+- Transform to circuit-friendly values: DOB → `year*10000 + month*100 + day` (so `1998-04-12`
+  becomes `19980412`), name and ID number → SHA-256 hashes, gender → integer code
+- Store **only the derived values** in Supabase. On the legacy path the raw ID number is
+  discarded immediately after hashing. On the signed-credential path (`/api/signed-proof`) it is
+  held in memory only long enough to build the signed payload, where it is a **private** circuit
+  input — still never logged, written to disk, or stored. See §9.
 - Generate and verify ZK proofs over those values
 - Optionally re-verify the age and name proofs on-chain
 
@@ -20,14 +24,23 @@ Proofs are Groth16 (circom + snarkjs), verified both locally and on-chain agains
 ```
 backend/                  Express API: upload, OCR, preprocessing, proof generation
   ocr.js                  Tesseract extraction + field regexes
-  preprocessing.js        DOB→days, SHA-256 hashing, gender encoding
+  preprocessing.js        Date encoding, SHA-256 hashing, gender encoding
   db.js                   Supabase client (stores derived values only)
-  proofgen.js             snarkjs Groth16 prove + verify
-  circuits/               circom 2.0 circuits and build artifacts
-  hardhat-deploy/         Solidity verifier contracts and deploy script
+  proofgen.js             snarkjs Groth16 prove + verify  (legacy circuits)
+  signedcredential.js     OCR fields -> canonical payload -> RSA signature at request time
+  composedproof.js        Composed-circuit proving (RSA verify + extraction + age check)
+  circuits/               circom 2.0 circuits and build artifacts (legacy; artifacts committed)
+  hardhat-deploy/         Solidity verifier contracts and deploy scripts
 frontend/                 React + Vite four-step UI
   src/components/         UploadStep, PreprocessStep, StorageStep, ProofStep
   src/contracts/          On-chain verification via ethers
+mock-issuer/              Mock issuer: RSA-2048 keypair, credential signing, 12-check verifier
+experiments/
+  rsa-baseline/           zk-email RSA circuit proven on its own vectors (validation only)
+  rsa-mock-issuer/        Our key/signature through that circuit (validation only)
+  credential-age-proof/   Composed circuit. NOT purely an experiment: backend/composedproof.js
+                          requires gen_input.js from here at runtime. Proving artifacts are
+                          gitignored and absent on a fresh clone.
 ```
 
 ## 3) The circuits
@@ -45,8 +58,15 @@ Prerequisites: Node.js LTS ≥ 18, npm. For rebuilding circuits you also need `c
 **Environment** — the backend reads `.env` from the **repository root** (not from `backend/`):
 
 ```bash
-cp .env.example .env      # then fill in SUPABASE_URL and SUPABASE_ANON_KEY
+cp .env.example .env      # then fill in SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
 ```
+
+**`SUPABASE_SERVICE_ROLE_KEY` is required** (Dashboard → Project Settings → API → `service_role`).
+The anon key will not work — see *Row Level Security* below — and the backend refuses to start
+without a valid service-role key rather than failing later on the first write.
+
+For redeploying contracts, `backend/hardhat-deploy/.env.hardhat` additionally needs
+`AMOY_RPC_URL`; the default public Amoy endpoint no longer resolves. See §5.
 
 The Supabase project needs a `users` table with columns: `id`, `name`, `dob_encoded`, `aadhaar_hash`, `name_hash`, `gender_code`, `created_at`.
 
@@ -127,7 +147,8 @@ npm run dev               # http://localhost:5173
 
 The Vite dev server proxies `/api` to `localhost:3001`, so run the backend first.
 
-**Circuits** — prebuilt artifacts (`.wasm`, `.zkey`, vkeys) are committed, so the app runs without this step:
+**Circuits** — the **legacy** circuit artifacts (`.wasm`, `.zkey`, vkeys for Age/Name/Gender) are
+committed, so `/api/upload` and `/api/generate-proof` work straight from a clone:
 
 ```bash
 cd backend/circuits
@@ -135,6 +156,12 @@ bash setup_circuit.sh     # downloads the ptau file, compiles, runs Groth16 setu
 ```
 
 > Re-running the setup produces **new** proving/verifying keys, which will no longer match the already-deployed verifier contracts. Redeploy from `backend/hardhat-deploy/` if you rebuild.
+
+> ⚠️ **The composed circuit's artifacts are NOT committed.** `cap_final.zkey` (128 MB), the ptau,
+> the r1cs and the wasm under `experiments/credential-age-proof/` are gitignored, so a fresh clone
+> does not have them. `/api/signed-proof` will return **`PROVING_UNAVAILABLE`**
+> (`reason: artifact_missing`, HTTP 500) until you build them — everything else still works. Build
+> steps are in `experiments/credential-age-proof/README.md`.
 
 ## 5) On-chain verification
 
@@ -146,7 +173,24 @@ Verifier contracts on Polygon Amoy (chain ID 80002), addresses in `frontend/src/
     circuit, but its ABI is not interchangeable with the current one.
 - `NameVerifier` — `0x23715a3216ACdF715a75463939A342b844dd01eE`
 
-Verification is a read-only `view` call, so no wallet or gas is needed. To redeploy, copy `backend/hardhat-deploy/.env.example` to `.env.hardhat`, add a funded deployer key, and run `npx hardhat run scripts/deploy.js --network amoy`.
+Verification is a read-only `view` call, so no wallet or gas is needed.
+
+To redeploy **only** the age verifier, copy `backend/hardhat-deploy/.env.example` to `.env.hardhat`
+and set:
+
+- `PRIVATE_KEY` — a funded Amoy deployer key
+- `AMOY_RPC_URL` — **required in practice.** The hardcoded default
+  `https://rpc-amoy.polygon.technology` no longer resolves (NXDOMAIN);
+  `https://polygon-amoy-bor-rpc.publicnode.com` works.
+
+```bash
+cd backend/hardhat-deploy
+npx hardhat run scripts/deploy-age.js --network amoy
+```
+
+> Use `deploy-age.js`, **not** `deploy.js`. The latter redeploys all three verifiers, which would
+> mint a new `NameVerifier` address for an unchanged circuit and orphan the working deployment.
+> `deploy-age.js` deploys only `AgeVerifier` and records the previous address under `retired`.
 
 ## 6) Typical flow
 
@@ -214,7 +258,7 @@ This is a demonstration, not production KYC:
 - **Composed proofs are slow.** `/api/signed-proof` takes roughly **4 seconds** end to end
   (~3.6–4.3s proving) against ~0.2s for the legacy age circuit — it is a 256,574-constraint
   circuit rather than 37. Any UI calling it needs a real loading state, not a spinner that
-  looks hung. `mock-issuer/` and `experiments/` address exactly this gap for the age path, but that work is **not yet wired into this pipeline** — see below.
+  looks hung.
 
 ### Fixed since the first version
 
@@ -225,24 +269,28 @@ This is a demonstration, not production KYC:
   wrong and no leap-year correction to omit. This required a new circuit, a new trusted setup, and
   a redeployed verifier contract.
 
-### Not yet integrated
+### Issuer-signed path: what is and is not wired up
 
-`POST /api/signed-proof` now wires this together end to end: OCR fields → canonical payload →
+`POST /api/signed-proof` wires this together end to end: OCR fields → canonical payload →
 RSA-2048 signature (mock issuer, at request time) → composed proof (RSA verify + in-circuit
 `"dob":"` extraction + age comparison) → local verification. It reuses the guards, byte format
 and limb decomposition from `mock-issuer/sign_credential.js` rather than reimplementing them,
 so there is one implementation of the byte contract.
 
-Still outstanding:
+**Wired up:** the endpoint is live, exercised by the demo scenarios, and returns a locally
+verified proof. It performs no database write.
 
-- **The frontend does not call it yet.** No UI change has been made.
-- **On-chain verification is not wired for this circuit.** The deployed `AgeVerifier` is for the
-  small standalone age circuit and takes different public signals; a composed-circuit verifier
-  has not been generated or deployed.
-- **Proving artifacts live in `experiments/`.** The endpoint references
+**Not wired up:**
+
+- **The frontend does not call it.** The UI still drives the legacy endpoints only, so this path
+  has to be exercised with `curl` (see §6). Any UI work must account for the ~4s proving time.
+- **No on-chain verification for this circuit.** The deployed `AgeVerifier` is the small
+  standalone age circuit and takes different public signals; a composed-circuit verifier has not
+  been generated or deployed.
+- **Proving artifacts are absent on a fresh clone.** The endpoint references
   `experiments/credential-age-proof/cap_final.zkey` (128 MB, gitignored) rather than a copy under
-  `backend/`. Deliberate for now — moving 128 MB was not worth doing before the shape settles.
-- Nothing is persisted by this endpoint: it performs no database write.
+  `backend/`. Deliberate for now. Without it the endpoint returns `PROVING_UNAVAILABLE`; see the
+  build steps in that directory's README.
 
 ## 8) Troubleshooting
 
@@ -250,9 +298,22 @@ Still outstanding:
 - **snarkjs errors** — ensure circom/snarkjs versions match what the circuits were built with
 - **On-chain verification fails** — most often the circuit artifacts were rebuilt without redeploying the verifiers
 - **CORS or network errors** — confirm the backend is running and the Vite proxy target matches its port
+- **`/api/signed-proof` returns `PROVING_UNAVAILABLE` / `artifact_missing`** — expected on a fresh
+  clone. The composed circuit's `cap_final.zkey` and wasm are gitignored; build them per
+  `experiments/credential-age-proof/README.md`. Everything else works without them.
+- **Backend exits at startup with "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY"** — the anon
+  key is not sufficient. RLS is enabled with no policies, so writes need the `service_role` key
+- **On-chain verification fails with "Failed to fetch"** — the default Amoy RPC
+  (`rpc-amoy.polygon.technology`) no longer resolves. Override the frontend with
+  `VITE_AMOY_RPC_URL` in `frontend/.env.local`, and hardhat with `AMOY_RPC_URL` in
+  `.env.hardhat`. Any chainId-80002 endpoint works, but it must be CORS-enabled for the browser
 
 ## 9) Security notes
 
 - Secrets live in `.env` (root) and `backend/hardhat-deploy/.env.hardhat`; both are gitignored and must stay that way
-- Raw Aadhaar numbers are hashed and discarded, never stored or returned to the client
+- Raw ID numbers are **never stored in the database, never logged in full (only `********9012`),
+  and never returned to the client.** On the legacy path the raw value is discarded immediately
+  after hashing. On `/api/signed-proof` it is required to build the canonical payload — the format
+  demands 12 literal digits, so a hash cannot substitute — and is held in memory only for that,
+  ending up inside the signed bytes, which are a **private** circuit input
 - Uploaded images are held in memory only and never written to disk

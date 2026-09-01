@@ -271,7 +271,7 @@ app.post('/api/demo', async (req, res) => {
       stages,
     });
   } else if (scenario === 'underage') {
-    const processed = preprocessData('Priya Sharma', '15/06/2015', '9876 5432 1098', 'Female');
+    const processed = preprocessData('Priya Sharma', '15/06/2015', '1098 7654 3210', 'Female');
 
     try {
       const storedUser = await storeUser(
@@ -337,7 +337,7 @@ app.post('/api/demo', async (req, res) => {
 // a photo that happens to break in the right way.
 const SIGNED_DEMO_SCENARIOS = {
   valid: { name: 'Rajesh Kumar', dob: '01/01/1990', aadhaarNumber: '1234 5678 9012', gender: 'Male' },
-  underage: { name: 'Priya Sharma', dob: '15/06/2015', aadhaarNumber: '9876 5432 1098', gender: 'Female' },
+  underage: { name: 'Priya Sharma', dob: '15/06/2015', aadhaarNumber: '1098 7654 3210', gender: 'Female' },
   // OCR itself fails before any credential can be built.
   ocr_fail: '__OCR_THROWS__',
   // A name carrying a character the ASCII guard rejects.
