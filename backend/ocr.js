@@ -1,3 +1,4 @@
+const os = require('os');
 const Tesseract = require('tesseract.js');
 const { isCalendarDate } = require('../mock-issuer/sign_credential');
 
@@ -7,7 +8,7 @@ async function extractAadhaarData(imageBuffer) {
 
   const {
     data: { text },
-  } = await Tesseract.recognize(imageBuffer, 'eng');
+  } = await Tesseract.recognize(imageBuffer, 'eng', { cachePath: os.tmpdir() }); // writable on serverless hosts
 
   console.log(`[OCR] Recognition complete in ${Date.now() - startTime}ms`);
   console.log(`[OCR] Raw text preview: "${text.substring(0, 50).replace(/\n/g, ' ')}..."`);

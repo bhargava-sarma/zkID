@@ -2,6 +2,13 @@ import { useState, useRef } from 'react';
 import axios from 'axios';
 
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/jpg'];
+const MAX_BYTES = 4 * 1024 * 1024; // Vercel caps request bodies at 4.5 MB
+
+function fileError(file) {
+  if (!ALLOWED_TYPES.includes(file.type)) return `Unsupported file type: ${file.type}. Only PNG, JPG, and JPEG are allowed.`;
+  if (file.size > MAX_BYTES) return 'File too large. Maximum size is 4 MB.';
+  return null;
+}
 
 const PIPELINE_STAGES = [
   { key: 'upload_received', label: 'Upload received' },
@@ -36,8 +43,9 @@ function UploadStep({ onComplete }) {
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const droppedFile = e.dataTransfer.files[0];
-      if (!ALLOWED_TYPES.includes(droppedFile.type)) {
-        setError(`Unsupported file type: ${droppedFile.type}. Only PNG, JPG, and JPEG are allowed.`);
+      const problem = fileError(droppedFile);
+      if (problem) {
+        setError(problem);
         return;
       }
       setFile(droppedFile);
@@ -48,8 +56,9 @@ function UploadStep({ onComplete }) {
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
-      if (!ALLOWED_TYPES.includes(selectedFile.type)) {
-        setError(`Unsupported file type: ${selectedFile.type}. Only PNG, JPG, and JPEG are allowed.`);
+      const problem = fileError(selectedFile);
+      if (problem) {
+        setError(problem);
         e.target.value = '';
         return;
       }
@@ -198,7 +207,7 @@ function UploadStep({ onComplete }) {
         <div className="upload-text">
           {file ? 'File selected' : 'Click or drag to upload'}
         </div>
-        <div className="upload-subtext">PNG, JPG, or JPEG only (max 10MB)</div>
+        <div className="upload-subtext">PNG, JPG, or JPEG only (max 4 MB)</div>
         {file && <div className="file-name">{file.name}</div>}
         <input
           ref={inputRef}

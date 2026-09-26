@@ -1,8 +1,9 @@
-// Proves the issuer-signed credential in the browser. Artifacts are checked
-// against the release SHA-256 and kept in Cache Storage after first use.
+// Proves the issuer-signed credential in the browser. Artifacts are static files
+// (large ones split into parts), checked against the release SHA-256 and kept in
+// Cache Storage after first use.
 import * as snarkjs from 'snarkjs';
 
-const BASE = '/api/circuit';
+const BASE = '/circuit';
 const CACHE = 'zkid-circuit';
 
 const post = (msg) => self.postMessage(msg);
@@ -13,22 +14,24 @@ async function sha256Hex(bytes) {
 }
 
 async function download(entry) {
-  const res = await fetch(`${BASE}/${entry.name}`, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`${entry.name}: HTTP ${res.status}`);
   const out = new Uint8Array(entry.bytes);
-  const reader = res.body.getReader();
   let offset = 0;
   let lastPct = -1;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (offset + value.length > out.length) throw new Error(`${entry.name}: larger than expected`);
-    out.set(value, offset);
-    offset += value.length;
-    const pct = Math.floor((offset / entry.bytes) * 100);
-    if (pct !== lastPct) {
-      lastPct = pct;
-      post({ type: 'progress', name: entry.name, pct });
+  for (const part of entry.parts) {
+    const res = await fetch(`${BASE}/${part}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`${part}: HTTP ${res.status}`);
+    const reader = res.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (offset + value.length > out.length) throw new Error(`${entry.name}: larger than expected`);
+      out.set(value, offset);
+      offset += value.length;
+      const pct = Math.floor((offset / entry.bytes) * 100);
+      if (pct !== lastPct) {
+        lastPct = pct;
+        post({ type: 'progress', name: entry.name, pct });
+      }
     }
   }
   if (offset !== entry.bytes) throw new Error(`${entry.name}: incomplete download`);
@@ -55,7 +58,7 @@ async function loadArtifact(entry) {
 
 self.onmessage = async ({ data: { input } }) => {
   try {
-    const manifest = await (await fetch(`${BASE}/artifacts.json`, { cache: 'no-store' })).json();
+    const manifest = await (await fetch(`${BASE}/manifest.json`, { cache: 'no-store' })).json();
     const entry = (name) => manifest.files.find((f) => f.name === name);
 
     post({ type: 'stage', stage: 'loading' });

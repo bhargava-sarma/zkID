@@ -108,6 +108,7 @@ function ProofStep({ userId, userName, source, onStartOver }) {
   const [signedSource, setSignedSource] = useState(source?.file ? UPLOADED : source?.scenario || 'valid');
   const [signedFailure, setSignedFailure] = useState(null);
   const [proveWhere, setProveWhere] = useState('server');
+  const [serverProving, setServerProving] = useState(true);
   const [browserStatus, setBrowserStatus] = useState('');
 
   const [claimedName, setClaimedName] = useState(userName || '');
@@ -119,6 +120,19 @@ function ProofStep({ userId, userName, source, onStartOver }) {
 
   const [onChainResults, setOnChainResults] = useState({});
   const [onChainLoading, setOnChainLoading] = useState({});
+
+  // Hosts without the proving key (e.g. Vercel) only support browser proving.
+  useEffect(() => {
+    axios
+      .get('/api/health')
+      .then(({ data }) => {
+        if (data.serverProving === false) {
+          setServerProving(false);
+          setProveWhere('browser');
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const inBrowser = activeTab === 'signed' && proveWhere === 'browser';
   const loadingStages = inBrowser ? BROWSER_STAGES : activeTab === 'signed' ? SIGNED_STAGES : PROOF_STAGES;
@@ -349,18 +363,22 @@ function ProofStep({ userId, userName, source, onStartOver }) {
                 </button>
               ))}
             </div>
-            <label className="name-input-label">Where to prove</label>
-            <div className="option-group">
-              {PROVE_WHERE.map((opt) => (
-                <button
-                  key={opt.key}
-                  className={`option-button ${proveWhere === opt.key ? 'selected' : ''}`}
-                  onClick={() => setProveWhere(opt.key)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
+            {serverProving && (
+              <>
+                <label className="name-input-label">Where to prove</label>
+                <div className="option-group">
+                  {PROVE_WHERE.map((opt) => (
+                    <button
+                      key={opt.key}
+                      className={`option-button ${proveWhere === opt.key ? 'selected' : ''}`}
+                      onClick={() => setProveWhere(opt.key)}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             {proveWhere === 'browser' && (
               <p className="card-description">
                 The server only issues and signs the credential. Your browser generates the proof, so no server

@@ -1,5 +1,6 @@
+const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
-require('dotenv').config({ path: '../.env' });
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 // Service role key: RLS on `users` has no policies, so the anon key is refused.
 // Safe only because this key never leaves the server.

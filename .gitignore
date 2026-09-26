@@ -16,7 +16,7 @@ backend/hardhat-deploy/artifacts/
 backend/hardhat-deploy/cache/
 
 # Downloaded on demand
-backend/eng.traineddata
+frontend/public/circuit/
 backend/circuits/*.ptau
 
 # Composed circuit: sources only. Artifacts come from the GitHub release (fetch_artifacts.js).

@@ -14,13 +14,6 @@ const CAP_WASM = path.join(CAP_DIR, 'credential_age_proof_js', 'credential_age_p
 const CAP_ZKEY = path.join(CAP_DIR, 'cap_final.zkey');
 const CAP_VKEY = path.join(CAP_DIR, 'verification_key.json');
 
-// Release asset name -> local path, plus the manifest itself.
-const MANIFEST = require(path.join(CAP_DIR, 'artifacts.json'));
-const CIRCUIT_FILES = {
-  'artifacts.json': path.join(CAP_DIR, 'artifacts.json'),
-  ...Object.fromEntries(MANIFEST.files.map((f) => [f.name, path.join(CAP_DIR, f.path)])),
-};
-
 function proverInput(circuitInputs, thresholdDate = computeThresholdDate()) {
   try {
     return buildCircuitInput(circuitInputs, thresholdDate).input;
@@ -90,4 +83,9 @@ async function generateComposedProof(circuitInputs, isoDob) {
   };
 }
 
-module.exports = { generateComposedProof, proverInput, CIRCUIT_FILES };
+// False on hosts without the 133 MB proving key (e.g. Vercel): browsers prove instead.
+function serverProvingAvailable() {
+  return [CAP_WASM, CAP_ZKEY, CAP_VKEY].every((p) => fs.existsSync(p));
+}
+
+module.exports = { generateComposedProof, proverInput, serverProvingAvailable };

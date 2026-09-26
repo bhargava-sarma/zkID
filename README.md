@@ -131,7 +131,6 @@ Signed payload: four ASCII fields, sorted keys, no whitespace, space-padded to 1
 |---|---|
 | `POST /api/signed-proof` | Image or `{scenario}` → issuer-signed credential age proof, proved on the server |
 | `POST /api/issue-credential` | Image or `{scenario}` → signed credential as circuit input, for proving in the browser |
-| `GET /api/circuit/:file` | Credential circuit artifacts for the browser prover |
 | `POST /api/upload` | Image → OCR → privacy-preserving storage |
 | `POST /api/demo` | Canned upload: `valid`, `underage`, `ocr_fail` |
 | `POST /api/generate-proof` | `{userId}` → age proof |
@@ -139,6 +138,16 @@ Signed payload: four ASCII fields, sorted keys, no whitespace, space-padded to 1
 | `POST /api/generate-gender-proof` | `{userId, claimedGender}` → gender proof |
 
 Error codes: `CREDENTIAL_UNPROCESSABLE` (retryable), `AGE_REQUIREMENT_NOT_MET`, `PROVING_UNAVAILABLE`.
+
+## Deploy to Vercel
+
+One Vercel project serves the UI, the circuit files and the API (see [`vercel.json`](vercel.json)).
+
+1. In Vercel, **Add New → Project** and import this repo. Leave the root directory as is.
+2. Add the environment variables `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
+3. Click **Deploy**.
+
+On Vercel, issuer-signed proofs run in the visitor's browser, because server-side proving needs about 3 GB of RAM. Uploads are limited to 4 MB.
 
 ## On-chain verifiers · Ethereum Sepolia
 
@@ -161,12 +170,14 @@ npm run deploy:all           # or one: deploy:credential, deploy:age, deploy:nam
 ## Project structure
 
 ```
+api/                              Vercel Function entry (exports the Express app)
 backend/                          Express API: OCR, preprocessing, signing, proof generation
   circuits/                       Age, Name and Gender circuits + keys
     credential-age-proof/         Issuer-bound credential circuit + artifact fetcher
   hardhat-deploy/                 Solidity verifiers and deploy scripts
 frontend/                         React UI: upload → preprocess → store → prove → verify on-chain
   src/prover/                     In-browser credential prover (Web Worker)
+  scripts/prepare-circuit.mjs     Stages circuit files in public/circuit/ before dev and build
 mock-issuer/                      RSA-2048 issuer: keygen, signing, independent verifier
 ```
 
