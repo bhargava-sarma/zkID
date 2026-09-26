@@ -13,7 +13,7 @@ Verify a customer once and let any institution check the result without seeing t
 - **Selective disclosure.** Prove age ≥ 18, a name match or a gender match. The verifier learns *yes*, never the date of birth, name or ID number.
 - **Issuer-bound proofs.** One circuit verifies an RSA-2048 signature *and* reads the date of birth from the signed bytes, so a proof can only attest to what the issuer signed. Altering one byte breaks it.
 - **Prove on your own device.** The issuer only signs the credential. The holder's browser generates the proof in about 5 seconds, so no server ever sees the private inputs.
-- **Verifiable by anyone.** Every proof type has a Groth16 verifier on Ethereum Sepolia with source published on Sourcify. Checking a proof is a free, read-only call that needs no wallet and no gas.
+- **Verifiable by anyone.** Every proof type has a Groth16 verifier on Ethereum Sepolia, with source verified on Etherscan and Sourcify. Checking a proof is a free, read-only call that needs no wallet and no gas.
 - **Privacy by design.** Images are processed in memory and never written to disk. Only hashes and encoded values are stored, and raw ID numbers are never logged or persisted.
 - **Strict validation.** Garbled or impossible dates (like 31 Feb) and missing fields are rejected before signing. Machine-readable error codes separate *retake the photo* from *not eligible*.
 
@@ -149,7 +149,7 @@ Error codes: `CREDENTIAL_UNPROCESSABLE` (retryable), `AGE_REQUIREMENT_NOT_MET`, 
 | `NameVerifier` | Name proof | [`0xa5075F2E83167C3c7fE5c3C3F1Fc5FCF1d378232`](https://sepolia.etherscan.io/address/0xa5075F2E83167C3c7fE5c3C3F1Fc5FCF1d378232) |
 | `GenderVerifier` | Gender proof | [`0x69D8A7Ac149Ed63364DF5DFFDEC25c25cE2417B9`](https://sepolia.etherscan.io/address/0x69D8A7Ac149Ed63364DF5DFFDEC25c25cE2417B9) |
 
-The UI reads addresses from [`frontend/src/contracts/addresses.json`](frontend/src/contracts/addresses.json) and checks on-chain for every proof type listed there. Source code is verified on [Sourcify](https://repo.sourcify.dev/11155111/0x1052Fc75ce491137D4FA7691b427D5356505b1cd) (exact match); `npm run verify` republishes it, and also publishes to Etherscan when `ETHERSCAN_API_KEY` is set.
+The UI reads addresses from [`frontend/src/contracts/addresses.json`](frontend/src/contracts/addresses.json) and checks on-chain for every proof type listed there. Source code is verified on Etherscan (see the links above) and on [Sourcify](https://repo.sourcify.dev/11155111/0x1052Fc75ce491137D4FA7691b427D5356505b1cd) (exact match). After a redeploy, `npm run verify` publishes to both; Etherscan needs `ETHERSCAN_API_KEY` in `.env.hardhat`.
 
 Deploy with Sepolia ETH (free from the [Google Cloud faucet](https://cloud.google.com/application/web3/faucet/ethereum/sepolia)) and `PRIVATE_KEY` set in `backend/hardhat-deploy/.env.hardhat`. Each deploy writes its address to `addresses.json`:
 

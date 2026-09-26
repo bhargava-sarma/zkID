@@ -30,12 +30,21 @@ async function sourcify(chainId, address, fqn, buildInfo) {
   throw new Error("timed out");
 }
 
+// Free Etherscan keys allow 3 calls per second; retry when limited.
+async function etherscanCall(url, init) {
+  for (let attempt = 0; ; attempt++) {
+    const body = await fetch(url, init).then((r) => r.json());
+    if (!/rate limit/i.test(body.result) || attempt === 3) return body;
+    await sleep(1000);
+  }
+}
+
 async function etherscan(chainId, address, fqn, buildInfo, apikey) {
-  const get = (params) => fetch(`${ETHERSCAN}?${new URLSearchParams({ chainid: chainId, apikey, ...params })}`).then((r) => r.json());
+  const get = (params) => etherscanCall(`${ETHERSCAN}?${new URLSearchParams({ chainid: chainId, apikey, ...params })}`);
   const current = await get({ module: "contract", action: "getsourcecode", address });
   if (current.status === "1" && current.result[0]?.SourceCode) return "already verified";
 
-  const submit = await fetch(`${ETHERSCAN}?chainid=${chainId}`, {
+  const submit = await etherscanCall(`${ETHERSCAN}?chainid=${chainId}`, {
     method: "POST",
     body: new URLSearchParams({
       apikey,
@@ -47,7 +56,7 @@ async function etherscan(chainId, address, fqn, buildInfo, apikey) {
       contractname: fqn,
       compilerversion: `v${buildInfo.solcLongVersion}`,
     }),
-  }).then((r) => r.json());
+  });
   if (submit.status !== "1") {
     if (/already verified/i.test(submit.result)) return "already verified";
     throw new Error(submit.result);
