@@ -1,13 +1,14 @@
 {
   "name": "zkid-contracts",
   "version": "1.0.0",
-  "description": "zkID Groth16 verifier contracts (Polygon Amoy)",
+  "description": "zkID Groth16 verifier contracts (Ethereum Sepolia)",
   "scripts": {
     "compile": "hardhat compile",
-    "deploy:age": "hardhat deploy-verifier --contract AgeVerifier --network amoy",
-    "deploy:name": "hardhat deploy-verifier --contract NameVerifier --network amoy",
-    "deploy:gender": "hardhat deploy-verifier --contract GenderVerifier --network amoy",
-    "deploy:credential": "hardhat deploy-verifier --contract CredentialAgeVerifier --network amoy"
+    "deploy:all": "npm run deploy:age && npm run deploy:name && npm run deploy:gender && npm run deploy:credential",
+    "deploy:age": "hardhat deploy-verifier --contract AgeVerifier --network sepolia",
+    "deploy:name": "hardhat deploy-verifier --contract NameVerifier --network sepolia",
+    "deploy:gender": "hardhat deploy-verifier --contract GenderVerifier --network sepolia",
+    "deploy:credential": "hardhat deploy-verifier --contract CredentialAgeVerifier --network sepolia"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^3.0.0",

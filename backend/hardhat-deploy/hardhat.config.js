@@ -18,11 +18,10 @@ module.exports = {
     }
   },
   networks: {
-    amoy: {
-      url: process.env.AMOY_RPC_URL || "https://polygon-amoy-bor-rpc.publicnode.com",
+    sepolia: {
+      url: process.env.SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-      chainId: 80002,
-      gasPrice: "auto"
+      chainId: 11155111
     }
   }
 };

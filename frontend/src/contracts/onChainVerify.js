@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { VERIFIERS, AMOY_RPC, verifierAbi } from "./contractConfig";
+import { VERIFIERS, CHAIN, verifierAbi } from "./contractConfig";
 
 // snarkjs -> Solidity calldata. pi_b's inner pairs are reversed for the verifier.
 function formatProofForSolidity(proof) {
@@ -12,7 +12,7 @@ function formatProofForSolidity(proof) {
   return { pA, pB, pC };
 }
 
-// Read-only view call on Polygon Amoy: no wallet or gas needed.
+// Read-only view call: no wallet or gas needed.
 export async function verifyOnChain(proof, publicSignals, proofType) {
   const verifier = VERIFIERS[proofType];
   const contractAddress = verifier?.address;
@@ -25,7 +25,7 @@ export async function verifyOnChain(proof, publicSignals, proofType) {
   }
 
   try {
-    const provider = new ethers.JsonRpcProvider(AMOY_RPC);
+    const provider = new ethers.JsonRpcProvider(CHAIN.rpc);
     const contract = new ethers.Contract(contractAddress, verifierAbi(verifier.publicSignals), provider);
     const { pA, pB, pC } = formatProofForSolidity(proof);
     const result = await contract.verifyProof(pA, pB, pC, publicSignals.map((s) => BigInt(s)));

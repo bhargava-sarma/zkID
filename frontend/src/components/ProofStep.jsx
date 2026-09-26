@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { verifyOnChain } from '../contracts/onChainVerify';
-import { hasVerifier } from '../contracts/contractConfig';
+import { hasVerifier, CHAIN } from '../contracts/contractConfig';
 
 const PROOF_STAGES = [
   'Preparing circuit inputs...',
@@ -514,7 +514,7 @@ function ProofStep({ userId, userName, source, onStartOver }) {
                   <div className="onchain-body onchain-loading">
                     <div className="spinner spinner-small" />
                     <span className="onchain-loading-text">
-                      Verifying proof on Polygon Amoy testnet...
+                      Verifying proof on {CHAIN.name}...
                     </span>
                   </div>
                 )}
@@ -523,10 +523,10 @@ function ProofStep({ userId, userName, source, onStartOver }) {
                   <div className="onchain-body onchain-success">
                     <span className="onchain-badge-icon">✓</span>
                     <div className="onchain-badge-content">
-                      <div className="onchain-badge-title">Verified on Polygon Amoy</div>
+                      <div className="onchain-badge-title">Verified on {CHAIN.name}</div>
                       <a
                         className="onchain-contract-link"
-                        href={`https://amoy.polygonscan.com/address/${currentOnChain.contractAddress}`}
+                        href={`${CHAIN.explorer}/address/${currentOnChain.contractAddress}`}
                         target="_blank"
                         rel="noopener noreferrer"
                       >
@@ -545,7 +545,7 @@ function ProofStep({ userId, userName, source, onStartOver }) {
                       {currentOnChain.contractAddress && (
                         <a
                           className="onchain-contract-link"
-                          href={`https://amoy.polygonscan.com/address/${currentOnChain.contractAddress}`}
+                          href={`${CHAIN.explorer}/address/${currentOnChain.contractAddress}`}
                           target="_blank"
                           rel="noopener noreferrer"
                         >

@@ -4,7 +4,7 @@
 
 Verify a customer once and let any institution check the result without seeing their personal data. zkID turns an identity document into zero-knowledge proofs of facts like *"over 18"*. The proofs are bound to an issuer's signature, and institutions can check them without ever seeing the underlying data.
 
-![circom](https://img.shields.io/badge/circom-2.x-black) ![Groth16](https://img.shields.io/badge/proofs-Groth16-black) ![Polygon Amoy](https://img.shields.io/badge/on--chain-Polygon%20Amoy-7b3fe4) ![React](https://img.shields.io/badge/UI-React%20%2B%20Vite-61dafb)
+![circom](https://img.shields.io/badge/circom-2.x-black) ![Groth16](https://img.shields.io/badge/proofs-Groth16-black) ![Ethereum Sepolia](https://img.shields.io/badge/on--chain-Ethereum%20Sepolia-627eea) ![React](https://img.shields.io/badge/UI-React%20%2B%20Vite-61dafb)
 
 ---
 
@@ -12,7 +12,7 @@ Verify a customer once and let any institution check the result without seeing t
 
 - **Selective disclosure.** Prove age ≥ 18, a name match or a gender match. The verifier learns *yes*, never the date of birth, name or ID number.
 - **Issuer-bound proofs.** One circuit verifies an RSA-2048 signature *and* reads the date of birth from the signed bytes, so a proof can only attest to what the issuer signed. Altering one byte breaks it.
-- **Verifiable by anyone.** Every proof type has a Groth16 Solidity verifier for Polygon Amoy. Checking a proof is a free, read-only call that needs no wallet and no gas.
+- **Verifiable by anyone.** Every proof type has a Groth16 Solidity verifier on Ethereum Sepolia. Checking a proof is a free, read-only call that needs no wallet and no gas.
 - **Privacy by design.** Images are processed in memory and never written to disk. Only hashes and encoded values are stored, and raw ID numbers are never logged or persisted.
 - **Strict validation.** Garbled or impossible dates (like 31 Feb) and missing fields are rejected before signing. Machine-readable error codes separate *retake the photo* from *not eligible*.
 
@@ -129,20 +129,22 @@ Signed payload: four ASCII fields, sorted keys, no whitespace, space-padded to 1
 
 Error codes: `CREDENTIAL_UNPROCESSABLE` (retryable), `AGE_REQUIREMENT_NOT_MET`, `PROVING_UNAVAILABLE`.
 
-## On-chain verifiers · Polygon Amoy
+## On-chain verifiers · Ethereum Sepolia
 
-| Contract | Address |
-|---|---|
-| AgeVerifier | [`0xa5075F2E83167C3c7fE5c3C3F1Fc5FCF1d378232`](https://amoy.polygonscan.com/address/0xa5075F2E83167C3c7fE5c3C3F1Fc5FCF1d378232) |
-| NameVerifier | [`0x23715a3216ACdF715a75463939A342b844dd01eE`](https://amoy.polygonscan.com/address/0x23715a3216ACdF715a75463939A342b844dd01eE) |
+| Contract | Verifies | Address |
+|---|---|---|
+| `CredentialAgeVerifier` | Issuer-signed credential age proof (18 public signals) | [`0x1052Fc75ce491137D4FA7691b427D5356505b1cd`](https://sepolia.etherscan.io/address/0x1052Fc75ce491137D4FA7691b427D5356505b1cd) |
+| `AgeVerifier` | Age proof | [`0x23715a3216ACdF715a75463939A342b844dd01eE`](https://sepolia.etherscan.io/address/0x23715a3216ACdF715a75463939A342b844dd01eE) |
+| `NameVerifier` | Name proof | [`0xa5075F2E83167C3c7fE5c3C3F1Fc5FCF1d378232`](https://sepolia.etherscan.io/address/0xa5075F2E83167C3c7fE5c3C3F1Fc5FCF1d378232) |
+| `GenderVerifier` | Gender proof | [`0x69D8A7Ac149Ed63364DF5DFFDEC25c25cE2417B9`](https://sepolia.etherscan.io/address/0x69D8A7Ac149Ed63364DF5DFFDEC25c25cE2417B9) |
 
-Addresses live in `frontend/src/contracts/addresses.json`. The UI verifies on-chain for every proof type listed there.
+The UI reads addresses from [`frontend/src/contracts/addresses.json`](frontend/src/contracts/addresses.json) and checks on-chain for every proof type listed there.
 
-Deploy or replace a verifier (set `PRIVATE_KEY` in `backend/hardhat-deploy/.env.hardhat`). This writes the new address to `addresses.json` for you:
+Deploy with Sepolia ETH (free from the [Google Cloud faucet](https://cloud.google.com/application/web3/faucet/ethereum/sepolia)) and `PRIVATE_KEY` set in `backend/hardhat-deploy/.env.hardhat`. Each deploy writes its address to `addresses.json`:
 
 ```bash
 cd backend/hardhat-deploy
-npm run deploy:gender        # also: deploy:credential, deploy:age, deploy:name
+npm run deploy:all           # or one: deploy:credential, deploy:age, deploy:name, deploy:gender
 ```
 
 ## Project structure
@@ -157,4 +159,4 @@ experiments/
   credential-age-proof/  Issuer-bound credential circuit
 ```
 
-**Stack:** circom 2 · snarkjs (Groth16, BN128) · Node.js / Express · Tesseract.js · Supabase · React / Vite · ethers.js · Hardhat · Polygon Amoy
+**Stack:** circom 2 · snarkjs (Groth16, BN128) · Node.js / Express · Tesseract.js · Supabase · React / Vite · ethers.js · Hardhat · Ethereum Sepolia

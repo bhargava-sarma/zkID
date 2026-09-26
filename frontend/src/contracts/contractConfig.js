@@ -10,9 +10,12 @@ export const VERIFIERS = {
 
 export const hasVerifier = (proofType) => Boolean(VERIFIERS[proofType]?.address);
 
-// Must be CORS-enabled: this runs in the browser.
-export const AMOY_RPC =
-  import.meta.env.VITE_AMOY_RPC_URL || "https://polygon-amoy-bor-rpc.publicnode.com";
+// The RPC must be CORS-enabled: calls come from the browser.
+export const CHAIN = {
+  name: "Ethereum Sepolia",
+  rpc: import.meta.env.VITE_SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com",
+  explorer: "https://sepolia.etherscan.io",
+};
 
 export const verifierAbi = (publicSignals) => [
   `function verifyProof(uint256[2] calldata _pA, uint256[2][2] calldata _pB, uint256[2] calldata _pC, uint256[${publicSignals}] calldata _pubSignals) public view returns (bool)`,
