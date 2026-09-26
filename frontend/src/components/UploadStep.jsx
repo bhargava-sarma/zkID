@@ -93,7 +93,7 @@ function UploadStep({ onComplete }) {
         await new Promise((resolve) => setTimeout(resolve, response.data.stages.length * 400 + 500));
       }
 
-      onComplete(response.data);
+      onComplete(response.data, { file });
     } catch (err) {
       const message =
         err.response?.data?.error ||
@@ -125,7 +125,7 @@ function UploadStep({ onComplete }) {
         await new Promise((resolve) => setTimeout(resolve, response.data.stages.length * 400 + 500));
       }
 
-      onComplete(response.data);
+      onComplete(response.data, { scenario });
     } catch (err) {
       const message =
         err.response?.data?.error ||

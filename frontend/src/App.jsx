@@ -14,9 +14,12 @@ const STEPS = [
 function App() {
   const [currentStep, setCurrentStep] = useState(1);
   const [uploadData, setUploadData] = useState(null);
+  const [source, setSource] = useState(null);
 
-  const handleUploadComplete = (data) => {
+  // source: { file } or { scenario }, reused by the signed-credential proof.
+  const handleUploadComplete = (data, uploadSource) => {
     setUploadData(data);
+    setSource(uploadSource);
     setCurrentStep(2);
   };
 
@@ -27,6 +30,7 @@ function App() {
   const handleStartOver = () => {
     setCurrentStep(1);
     setUploadData(null);
+    setSource(null);
   };
 
   return (
@@ -78,6 +82,7 @@ function App() {
           <ProofStep
             userId={uploadData?.userId}
             userName={uploadData?.stored?.name}
+            source={source}
             onStartOver={handleStartOver}
           />
         )}

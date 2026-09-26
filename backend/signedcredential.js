@@ -106,6 +106,7 @@ function buildCanonicalPayload(ocr) {
 }
 
 function guardReason(message) {
+  if (/calendar date/i.test(message)) return 'dob_invalid';
   if (/dob/i.test(message)) return 'dob_format';
   if (/id_number/i.test(message)) return 'id_number_format';
   if (/gender/i.test(message)) return 'gender_invalid';

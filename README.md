@@ -14,7 +14,7 @@ Verify a customer once and let any institution check the result without seeing t
 - **Issuer-bound proofs.** One circuit verifies an RSA-2048 signature *and* reads the date of birth from the signed bytes, so a proof can only attest to what the issuer signed. Altering one byte breaks it.
 - **Verifiable by anyone.** The age and name verifier contracts live on Polygon Amoy. Checking a proof is a free, read-only call that needs no wallet and no gas.
 - **Privacy by design.** Images are processed in memory and never written to disk. Only hashes and encoded values are stored, and raw ID numbers are never logged or persisted.
-- **Actionable failures.** Machine-readable error codes separate *retake the photo* from *not eligible*.
+- **Strict validation.** Garbled or impossible dates (like 31 Feb) and missing fields are rejected before signing. Machine-readable error codes separate *retake the photo* from *not eligible*.
 
 ## How it works
 
@@ -50,7 +50,7 @@ cd backend  && npm install && npm run dev     # API on :3001
 cd frontend && npm install && npm run dev     # UI on :5173
 ```
 
-Open `http://localhost:5173` and upload an Aadhaar image, or pick a built-in demo scenario.
+Open `http://localhost:5173`, upload an Aadhaar image or pick a demo scenario, then generate an issuer-signed proof in the **Prove** step.
 
 Issuer-signed proof from the command line (after building the credential circuit, below):
 
@@ -142,7 +142,7 @@ Redeploy with `cd backend/hardhat-deploy && npm run deploy:age` (set `PRIVATE_KE
 backend/          Express API: OCR, preprocessing, signing, proof generation
   circuits/       Age, Name and Gender circuits + keys
   hardhat-deploy/ Solidity verifiers and deploy scripts
-frontend/         React UI: upload → preprocess → store → prove → verify on-chain
+frontend/         React UI: upload → preprocess → store → prove (signed, age, name, gender) → verify on-chain
 mock-issuer/      RSA-2048 issuer: keygen, signing, independent verifier
 experiments/
   credential-age-proof/  Issuer-bound credential circuit

@@ -47,6 +47,7 @@ const SIGNED_DEMO_OCR = {
   malformed_name: { ...DEMO_OCR.valid, name: 'Ra"jesh Kumar' },
   gender_missing: { ...DEMO_OCR.valid, gender: null },
   dob_garbled: { ...DEMO_OCR.valid, dob: 'O1/O1/199O' },
+  invalid_date: { ...DEMO_OCR.valid, dob: '31/02/1990' },
   long_name: { ...DEMO_OCR.valid, name: 'A'.repeat(60) },
 };
 

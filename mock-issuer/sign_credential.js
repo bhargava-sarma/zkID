@@ -22,6 +22,13 @@ const PUBLIC_KEY_PATH = path.join(__dirname, 'mock_issuer_public.pem');
 const CREDENTIAL_PATH = path.join(__dirname, 'signed_credential.json');
 const CIRCUIT_INPUTS_PATH = path.join(__dirname, 'circuit_inputs.json');
 
+// Gregorian calendar, including leap years.
+function isCalendarDate(year, month, day) {
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth[month - 1];
+}
+
 // The circuit hashes raw bytes, so reject anything JSON would escape or encode as multi-byte.
 function validatePayload(payload) {
   if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
@@ -58,6 +65,10 @@ function validatePayload(payload) {
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(payload.dob)) {
     throw new Error(`Field "dob" must be YYYY-MM-DD, got "${payload.dob}".`);
+  }
+  const [year, month, day] = payload.dob.split('-').map(Number);
+  if (!isCalendarDate(year, month, day)) {
+    throw new Error(`Field "dob" is not a real calendar date: "${payload.dob}".`);
   }
   if (!/^\d{12}$/.test(payload.id_number)) {
     throw new Error(`Field "id_number" must be exactly 12 digits.`);
@@ -221,6 +232,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  isCalendarDate,
   validatePayload,
   serializePayload,
   padToFixedLength,

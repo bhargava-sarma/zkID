@@ -1,4 +1,5 @@
 const Tesseract = require('tesseract.js');
+const { isCalendarDate } = require('../mock-issuer/sign_credential');
 
 async function extractAadhaarData(imageBuffer) {
   console.log('[OCR] Starting Tesseract recognition...');
@@ -44,6 +45,13 @@ async function extractAadhaarData(imageBuffer) {
     if (dobLine > 0) {
       const nameCandidate = lines[dobLine - 1].replace(/[^a-zA-Z\s]/g, '').trim();
       if (nameCandidate.length > 1) result.name = nameCandidate;
+    }
+
+    // A misread like 31/02 is dropped, never passed on as a real DOB.
+    const [day, month, year] = result.dob.split('/').map(Number);
+    if (!isCalendarDate(year, month, day)) {
+      console.log('[OCR] DOB is not a real calendar date; treating as unreadable');
+      result.dob = null;
     }
   }
 
