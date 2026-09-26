@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
+const fs = require('fs');
 require('dotenv').config({ path: '../.env' });
 
 const { extractAadhaarData } = require('./ocr');
@@ -8,7 +9,7 @@ const { preprocessData, computeNameHash } = require('./preprocessing');
 const { storeUser, getUserById } = require('./db');
 const { generateProof, generateNameProof, generateGenderProof } = require('./proofgen');
 const { buildCanonicalPayload, signCredential, CredentialError } = require('./signedcredential');
-const { generateComposedProof } = require('./composedproof');
+const { generateComposedProof, proverInput, CIRCUIT_FILES } = require('./composedproof');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -260,45 +261,77 @@ app.post('/api/demo', async (req, res) => {
   }
 });
 
-// Issuer-signed path. No DB write, and no fallback to the legacy endpoints:
-// if a credential can't be signed or proven, the request fails.
+class BadRequest extends Error {}
+
+// OCR (or a canned scenario) -> signed credential. No DB write on either signed path.
+async function issueSignedCredential(req, pushStage) {
+  const scenario = req.body && req.body.scenario;
+  let ocr;
+  if (req.file) {
+    pushStage('upload_received', 'complete', `${req.file.mimetype}, ${req.file.size} bytes`);
+    pushStage('ocr_started', 'running', 'Tesseract OCR processing...');
+    ocr = await extractAadhaarData(req.file.buffer);
+    pushStage('ocr_complete', 'complete', 'Extracted: Name, DOB, ID, Gender');
+  } else if (scenario) {
+    if (!Object.hasOwn(SIGNED_DEMO_OCR, scenario)) {
+      throw new BadRequest(`Unknown scenario. Use one of: ${Object.keys(SIGNED_DEMO_OCR).join(', ')}.`);
+    }
+    pushStage('upload_received', 'complete', `Demo scenario: ${scenario}`);
+    if (SIGNED_DEMO_OCR[scenario] === null) {
+      pushStage('ocr_started', 'running', 'Tesseract OCR processing...');
+      throw new Error(OCR_FAIL_MESSAGE);
+    }
+    ocr = SIGNED_DEMO_OCR[scenario];
+    pushStage('ocr_complete', 'complete', 'Extracted (simulated)');
+  } else {
+    throw new BadRequest('Provide an image file or a demo scenario.');
+  }
+
+  pushStage('credential_signing', 'running', 'Constructing canonical payload...');
+  const payload = buildCanonicalPayload(ocr);
+  const signed = signCredential(payload);
+  pushStage(
+    'credential_signed',
+    'complete',
+    `${signed.canonicalBytes} canonical + ${signed.circuitInputs.padding.pad_byte_count} pad = 119 bytes, RSA-2048`
+  );
+  return { payload, ...signed };
+}
+
+function sendSignedError(res, err, stages) {
+  if (err instanceof BadRequest) {
+    return res.status(400).json({ error: err.message });
+  }
+  if (err instanceof CredentialError) {
+    // detail can quote field contents: log only, never send.
+    console.error(`[SIGNED] ${err.code}/${err.reason}: ${err.detail}`);
+    stages.push(stage('error', 'failed', err.userMessage));
+    return res.status(err.status).json({
+      error: err.userMessage,
+      code: err.code,
+      reason: err.reason,
+      retryable: err.retryable,
+      stages,
+    });
+  }
+  console.error(`[SIGNED] unhandled: ${err.message}`);
+  stages.push(stage('error', 'failed', err.message));
+  return res.status(422).json({
+    error: err.message,
+    code: 'CREDENTIAL_UNPROCESSABLE',
+    reason: 'ocr_extraction_failed',
+    retryable: true,
+    stages,
+  });
+}
+
+// Issue, sign and prove on the server. No fallback to the legacy endpoints.
 app.post('/api/signed-proof', upload.single('image'), async (req, res) => {
   const stages = [];
   const pushStage = (...args) => stages.push(stage(...args));
-  const scenario = req.body && req.body.scenario;
 
   try {
-    let ocr;
-    if (req.file) {
-      pushStage('upload_received', 'complete', `${req.file.mimetype}, ${req.file.size} bytes`);
-      pushStage('ocr_started', 'running', 'Tesseract OCR processing...');
-      ocr = await extractAadhaarData(req.file.buffer);
-      pushStage('ocr_complete', 'complete', 'Extracted: Name, DOB, ID, Gender');
-    } else if (scenario) {
-      if (!Object.hasOwn(SIGNED_DEMO_OCR, scenario)) {
-        return res.status(400).json({
-          error: `Unknown scenario. Use one of: ${Object.keys(SIGNED_DEMO_OCR).join(', ')}.`,
-        });
-      }
-      pushStage('upload_received', 'complete', `Demo scenario: ${scenario}`);
-      if (SIGNED_DEMO_OCR[scenario] === null) {
-        pushStage('ocr_started', 'running', 'Tesseract OCR processing...');
-        throw new Error(OCR_FAIL_MESSAGE);
-      }
-      ocr = SIGNED_DEMO_OCR[scenario];
-      pushStage('ocr_complete', 'complete', 'Extracted (simulated)');
-    } else {
-      return res.status(400).json({ error: 'Provide an image file or a demo scenario.' });
-    }
-
-    pushStage('credential_signing', 'running', 'Constructing canonical payload...');
-    const payload = buildCanonicalPayload(ocr);
-    const { credential, circuitInputs, canonicalBytes } = signCredential(payload);
-    pushStage(
-      'credential_signed',
-      'complete',
-      `${canonicalBytes} canonical + ${circuitInputs.padding.pad_byte_count} pad = 119 bytes, RSA-2048`
-    );
+    const { payload, credential, circuitInputs } = await issueSignedCredential(req, pushStage);
 
     pushStage('proof_started', 'running', 'RSA verify + in-circuit extraction + age check...');
     const result = await generateComposedProof(circuitInputs, payload.dob);
@@ -318,28 +351,33 @@ app.post('/api/signed-proof', upload.single('image'), async (req, res) => {
       stages,
     });
   } catch (err) {
-    if (err instanceof CredentialError) {
-      // detail can quote field contents: log only, never send.
-      console.error(`[SIGNED-PROOF] ${err.code}/${err.reason}: ${err.detail}`);
-      pushStage('error', 'failed', err.userMessage);
-      return res.status(err.status).json({
-        error: err.userMessage,
-        code: err.code,
-        reason: err.reason,
-        retryable: err.retryable,
-        stages,
-      });
-    }
-    console.error(`[SIGNED-PROOF] unhandled: ${err.message}`);
-    pushStage('error', 'failed', err.message);
-    return res.status(422).json({
-      error: err.message,
-      code: 'CREDENTIAL_UNPROCESSABLE',
-      reason: 'ocr_extraction_failed',
-      retryable: true,
-      stages,
-    });
+    sendSignedError(res, err, stages);
   }
+});
+
+// Issue and sign only: the holder proves in their own browser. The response
+// carries the holder's own credential (including the raw ID) as circuit input;
+// it is not stored or logged.
+app.post('/api/issue-credential', upload.single('image'), async (req, res) => {
+  const stages = [];
+  const pushStage = (...args) => stages.push(stage(...args));
+
+  try {
+    const { credential, circuitInputs } = await issueSignedCredential(req, pushStage);
+    res.json({ success: true, input: proverInput(circuitInputs), credentialSha256: credential.sha256, stages });
+  } catch (err) {
+    sendSignedError(res, err, stages);
+  }
+});
+
+// Proving artifacts for in-browser proving (release asset names only).
+app.get('/api/circuit/:file', (req, res) => {
+  const file = CIRCUIT_FILES[req.params.file];
+  if (!file) return res.status(404).json({ error: 'Unknown circuit file.' });
+  if (!fs.existsSync(file)) {
+    return res.status(503).json({ error: 'Circuit artifacts missing. Run: npm run fetch-circuit' });
+  }
+  res.sendFile(file);
 });
 
 // Multer errors (file type, size).

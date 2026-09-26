@@ -20,10 +20,10 @@ backend/eng.traineddata
 backend/circuits/*.ptau
 
 # Composed circuit: sources only. Artifacts come from the GitHub release (fetch_artifacts.js).
-experiments/credential-age-proof/*
-!experiments/credential-age-proof/circuits/
-!experiments/credential-age-proof/gen_input.js
-!experiments/credential-age-proof/artifacts.json
-!experiments/credential-age-proof/fetch_artifacts.js
-!experiments/credential-age-proof/package.json
-!experiments/credential-age-proof/package-lock.json
+backend/circuits/credential-age-proof/*
+!backend/circuits/credential-age-proof/circuits/
+!backend/circuits/credential-age-proof/gen_input.js
+!backend/circuits/credential-age-proof/artifacts.json
+!backend/circuits/credential-age-proof/fetch_artifacts.js
+!backend/circuits/credential-age-proof/package.json
+!backend/circuits/credential-age-proof/package-lock.json

@@ -12,7 +12,8 @@ Verify a customer once and let any institution check the result without seeing t
 
 - **Selective disclosure.** Prove age ≥ 18, a name match or a gender match. The verifier learns *yes*, never the date of birth, name or ID number.
 - **Issuer-bound proofs.** One circuit verifies an RSA-2048 signature *and* reads the date of birth from the signed bytes, so a proof can only attest to what the issuer signed. Altering one byte breaks it.
-- **Verifiable by anyone.** Every proof type has a Groth16 Solidity verifier on Ethereum Sepolia. Checking a proof is a free, read-only call that needs no wallet and no gas.
+- **Prove on your own device.** The issuer only signs the credential. The holder's browser generates the proof in about 5 seconds, so no server ever sees the private inputs.
+- **Verifiable by anyone.** Every proof type has a Groth16 verifier on Ethereum Sepolia with source published on Sourcify. Checking a proof is a free, read-only call that needs no wallet and no gas.
 - **Privacy by design.** Images are processed in memory and never written to disk. Only hashes and encoded values are stored, and raw ID numbers are never logged or persisted.
 - **Strict validation.** Garbled or impossible dates (like 31 Feb) and missing fields are rejected before signing. Machine-readable error codes separate *retake the photo* from *not eligible*.
 
@@ -22,20 +23,20 @@ Verify a customer once and let any institution check the result without seeing t
 flowchart LR
     A["ID document"] -->|"OCR, in memory"| B["Canonical credential"]
     B -->|"RSA-2048 signature"| C["Signed credential"]
-    C -->|"Groth16 prover"| D["ZK proof"]
+    C -->|"Groth16 prover<br/>(browser or server)"| D["ZK proof"]
     D --> E["Any institution verifies<br/>and learns only the claim"]
 ```
 
 1. **Extract**: OCR reads name, date of birth, ID number and gender from the document.
 2. **Sign**: the fields become a fixed 119-byte canonical payload, signed by the issuer.
-3. **Prove**: a Groth16 circuit checks the signature, extracts the date of birth in-circuit and asserts the age threshold.
+3. **Prove**: in the holder's browser or on the server, a Groth16 circuit checks the signature, extracts the date of birth in-circuit and asserts the age threshold.
 4. **Verify**: the relying institution checks the proof against a public verification key or an on-chain contract.
 
 ## Proofs
 
 | Proof | Proves | Hidden | Verification |
 |---|---|---|---|
-| **Credential age** | Issuer signed the credential, and its holder is ≥ 18 | Name, DOB, ID, gender | Off-chain + on-chain · ~4 s to prove |
+| **Credential age** | Issuer signed the credential, and its holder is ≥ 18 | Name, DOB, ID, gender | Off-chain + on-chain · ~5 s to prove, in the browser or on the server |
 | **Age** | DOB ≤ threshold date | Date of birth | Off-chain + on-chain |
 | **Name** | Name matches a claimed identity | Name | Off-chain + on-chain |
 | **Gender** | Gender matches a claimed value | Gender | Off-chain + on-chain |
@@ -86,7 +87,7 @@ The backend uses the service role key, which stays on the server. The browser on
 Needs `circom` 2.x and `snarkjs`. The Hermez Powers of Tau file is mirrored in the release; its BLAKE2b hash matches the one published by snarkjs.
 
 ```bash
-cd experiments/credential-age-proof
+cd backend/circuits/credential-age-proof
 npm install
 circom circuits/credential_age_proof.circom --r1cs --wasm --sym -l node_modules -o .
 curl -fL -o powersOfTau28_hez_final_19.ptau \
@@ -103,7 +104,7 @@ snarkjs zkey export verificationkey cap_final.zkey verification_key.json
 rm cap_0000.zkey
 ```
 
-A new proving key needs its own on-chain verifier: export it with `snarkjs zkey export solidityverifier cap_final.zkey ../../backend/hardhat-deploy/contracts/CredentialAgeVerifier.sol`, rename the contract to `CredentialAgeVerifier`, then run `npm run deploy:credential`.
+A new proving key needs its own on-chain verifier: export it with `snarkjs zkey export solidityverifier cap_final.zkey ../../hardhat-deploy/contracts/CredentialAgeVerifier.sol`, rename the contract to `CredentialAgeVerifier`, then run `npm run deploy:credential`.
 </details>
 
 <details>
@@ -114,7 +115,7 @@ cd mock-issuer
 node sign_credential.js      # sign payload.json with the demo issuer key
 node verify_credential.js    # 12 independent checks, including tamper controls
 
-cd ../experiments/credential-age-proof
+cd ../backend/circuits/credential-age-proof
 W="node credential_age_proof_js/generate_witness.js credential_age_proof_js/credential_age_proof.wasm"
 node gen_input.js && $W input.json w.wtns                                  # accepted
 node gen_input.js --tamper=date && $W input_tampered_date.json w.wtns      # rejected: signature
@@ -128,7 +129,9 @@ Signed payload: four ASCII fields, sorted keys, no whitespace, space-padded to 1
 
 | Endpoint | Description |
 |---|---|
-| `POST /api/signed-proof` | Image or `{scenario}` → issuer-signed credential age proof |
+| `POST /api/signed-proof` | Image or `{scenario}` → issuer-signed credential age proof, proved on the server |
+| `POST /api/issue-credential` | Image or `{scenario}` → signed credential as circuit input, for proving in the browser |
+| `GET /api/circuit/:file` | Credential circuit artifacts for the browser prover |
 | `POST /api/upload` | Image → OCR → privacy-preserving storage |
 | `POST /api/demo` | Canned upload: `valid`, `underage`, `ocr_fail` |
 | `POST /api/generate-proof` | `{userId}` → age proof |
@@ -146,7 +149,7 @@ Error codes: `CREDENTIAL_UNPROCESSABLE` (retryable), `AGE_REQUIREMENT_NOT_MET`, 
 | `NameVerifier` | Name proof | [`0xa5075F2E83167C3c7fE5c3C3F1Fc5FCF1d378232`](https://sepolia.etherscan.io/address/0xa5075F2E83167C3c7fE5c3C3F1Fc5FCF1d378232) |
 | `GenderVerifier` | Gender proof | [`0x69D8A7Ac149Ed63364DF5DFFDEC25c25cE2417B9`](https://sepolia.etherscan.io/address/0x69D8A7Ac149Ed63364DF5DFFDEC25c25cE2417B9) |
 
-The UI reads addresses from [`frontend/src/contracts/addresses.json`](frontend/src/contracts/addresses.json) and checks on-chain for every proof type listed there.
+The UI reads addresses from [`frontend/src/contracts/addresses.json`](frontend/src/contracts/addresses.json) and checks on-chain for every proof type listed there. Source code is verified on [Sourcify](https://repo.sourcify.dev/11155111/0x1052Fc75ce491137D4FA7691b427D5356505b1cd) (exact match); `npm run verify` republishes it, and also publishes to Etherscan when `ETHERSCAN_API_KEY` is set.
 
 Deploy with Sepolia ETH (free from the [Google Cloud faucet](https://cloud.google.com/application/web3/faucet/ethereum/sepolia)) and `PRIVATE_KEY` set in `backend/hardhat-deploy/.env.hardhat`. Each deploy writes its address to `addresses.json`:
 
@@ -158,13 +161,13 @@ npm run deploy:all           # or one: deploy:credential, deploy:age, deploy:nam
 ## Project structure
 
 ```
-backend/          Express API: OCR, preprocessing, signing, proof generation
-  circuits/       Age, Name and Gender circuits + keys
-  hardhat-deploy/ Solidity verifiers and deploy scripts
-frontend/         React UI: upload → preprocess → store → prove (signed, age, name, gender) → verify on-chain
-mock-issuer/      RSA-2048 issuer: keygen, signing, independent verifier
-experiments/
-  credential-age-proof/  Issuer-bound credential circuit
+backend/                          Express API: OCR, preprocessing, signing, proof generation
+  circuits/                       Age, Name and Gender circuits + keys
+    credential-age-proof/         Issuer-bound credential circuit + artifact fetcher
+  hardhat-deploy/                 Solidity verifiers and deploy scripts
+frontend/                         React UI: upload → preprocess → store → prove → verify on-chain
+  src/prover/                     In-browser credential prover (Web Worker)
+mock-issuer/                      RSA-2048 issuer: keygen, signing, independent verifier
 ```
 
 **Stack:** circom 2 · snarkjs (Groth16, BN128) · Node.js / Express · Tesseract.js · Supabase · React / Vite · ethers.js · Hardhat · Ethereum Sepolia

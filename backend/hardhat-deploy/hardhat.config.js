@@ -6,6 +6,9 @@ task("deploy-verifier", "Deploy one Groth16 verifier contract")
   .addParam("contract", "AgeVerifier | NameVerifier | GenderVerifier | CredentialAgeVerifier")
   .setAction(async ({ contract }, hre) => require("./scripts/deploy-verifier")(hre, contract));
 
+task("verify-verifiers", "Publish verifier source to Sourcify (and Etherscan with ETHERSCAN_API_KEY)")
+  .setAction(async (_, hre) => require("./scripts/verify-verifiers")(hre));
+
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: {

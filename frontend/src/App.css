@@ -692,6 +692,13 @@ body {
   letter-spacing: 0.5px;
 }
 
+.browser-status {
+  margin-top: 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .stage-trace {
   max-width: none;
   margin-bottom: 24px;

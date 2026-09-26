@@ -5,7 +5,7 @@ const snarkjs = require('snarkjs');
 const fs = require('fs');
 const path = require('path');
 
-const CAP_DIR = path.join(__dirname, '..', 'experiments', 'credential-age-proof');
+const CAP_DIR = path.join(__dirname, 'circuits', 'credential-age-proof');
 const { buildCircuitInput } = require(path.join(CAP_DIR, 'gen_input.js'));
 const { computeThresholdDate } = require('./proofgen');
 const { CredentialError, unavailable } = require('./signedcredential');
@@ -13,6 +13,21 @@ const { CredentialError, unavailable } = require('./signedcredential');
 const CAP_WASM = path.join(CAP_DIR, 'credential_age_proof_js', 'credential_age_proof.wasm');
 const CAP_ZKEY = path.join(CAP_DIR, 'cap_final.zkey');
 const CAP_VKEY = path.join(CAP_DIR, 'verification_key.json');
+
+// Release asset name -> local path, plus the manifest itself.
+const MANIFEST = require(path.join(CAP_DIR, 'artifacts.json'));
+const CIRCUIT_FILES = {
+  'artifacts.json': path.join(CAP_DIR, 'artifacts.json'),
+  ...Object.fromEntries(MANIFEST.files.map((f) => [f.name, path.join(CAP_DIR, f.path)])),
+};
+
+function proverInput(circuitInputs, thresholdDate = computeThresholdDate()) {
+  try {
+    return buildCircuitInput(circuitInputs, thresholdDate).input;
+  } catch (err) {
+    throw unavailable('input_build_failed', err.message);
+  }
+}
 
 async function generateComposedProof(circuitInputs, isoDob) {
   for (const [label, p] of [['wasm', CAP_WASM], ['zkey', CAP_ZKEY], ['vkey', CAP_VKEY]]) {
@@ -38,12 +53,7 @@ async function generateComposedProof(circuitInputs, isoDob) {
     });
   }
 
-  let input;
-  try {
-    input = buildCircuitInput(circuitInputs, thresholdDate).input;
-  } catch (err) {
-    throw unavailable('input_build_failed', err.message);
-  }
+  const input = proverInput(circuitInputs, thresholdDate);
 
   const started = Date.now();
   let proof;
@@ -80,4 +90,4 @@ async function generateComposedProof(circuitInputs, isoDob) {
   };
 }
 
-module.exports = { generateComposedProof };
+module.exports = { generateComposedProof, proverInput, CIRCUIT_FILES };

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { verifyOnChain } from '../contracts/onChainVerify';
 import { hasVerifier, CHAIN } from '../contracts/contractConfig';
+import { proveInBrowser } from '../prover/proveInBrowser';
 
 const PROOF_STAGES = [
   'Preparing circuit inputs...',
@@ -14,6 +15,19 @@ const SIGNED_STAGES = [
   'Reading the document...',
   'Signing the credential (RSA-2048)...',
   'Proving signature + age in one circuit...',
+];
+
+const BROWSER_STAGES = [
+  'Issuing the signed credential...',
+  'Loading the proving key (cached after first use)...',
+  'Proving in your browser...',
+  'Verifying proof...',
+];
+const BROWSER_STAGE_INDEX = { loading: 1, proving: 2, verifying: 3 };
+
+const PROVE_WHERE = [
+  { key: 'server', label: 'Server' },
+  { key: 'browser', label: 'Your browser' },
 ];
 
 const TABS = [
@@ -93,6 +107,8 @@ function ProofStep({ userId, userName, source, onStartOver }) {
 
   const [signedSource, setSignedSource] = useState(source?.file ? UPLOADED : source?.scenario || 'valid');
   const [signedFailure, setSignedFailure] = useState(null);
+  const [proveWhere, setProveWhere] = useState('server');
+  const [browserStatus, setBrowserStatus] = useState('');
 
   const [claimedName, setClaimedName] = useState(userName || '');
 
@@ -104,11 +120,14 @@ function ProofStep({ userId, userName, source, onStartOver }) {
   const [onChainResults, setOnChainResults] = useState({});
   const [onChainLoading, setOnChainLoading] = useState({});
 
-  const loadingStages = activeTab === 'signed' ? SIGNED_STAGES : PROOF_STAGES;
+  const inBrowser = activeTab === 'signed' && proveWhere === 'browser';
+  const loadingStages = inBrowser ? BROWSER_STAGES : activeTab === 'signed' ? SIGNED_STAGES : PROOF_STAGES;
 
+  // Server proofs animate on a timer; browser proofs report real progress.
   useEffect(() => {
     if (!loading) return;
     setCurrentStage(0);
+    if (inBrowser) return;
     const interval = setInterval(() => {
       setCurrentStage((prev) => (prev < loadingStages.length - 1 ? prev + 1 : prev));
     }, 800);
@@ -140,25 +159,64 @@ function ProofStep({ userId, userName, source, onStartOver }) {
     }
   };
 
+  const postCredentialSource = (url) => {
+    if (signedSource === UPLOADED) {
+      const formData = new FormData();
+      formData.append('image', source.file);
+      return axios.post(url, formData);
+    }
+    return axios.post(url, { scenario: signedSource });
+  };
+
+  // The server only issues the credential; proving happens on this device.
+  const proveSignedInBrowser = async () => {
+    const { data } = await postCredentialSource('/api/issue-credential');
+    const { input, stages } = data;
+
+    // Age rule checked first, so an underage holder gets a clear answer instead of a failed proof.
+    const at = input.dobIndex + 7;
+    const dob = String.fromCharCode(...input.msg.slice(at, at + 10));
+    if (Number(dob.replaceAll('-', '')) > input.thresholdDate) {
+      const failure = {
+        error: 'This credential does not meet the minimum age requirement.',
+        code: 'AGE_REQUIREMENT_NOT_MET',
+        reason: 'underage',
+        retryable: false,
+        stages: [...stages, { name: 'error', status: 'failed', detail: 'Checked in your browser' }],
+      };
+      throw Object.assign(new Error(failure.error), { failure });
+    }
+
+    const result = await proveInBrowser(input, {
+      onStage: (stage) => {
+        setCurrentStage(BROWSER_STAGE_INDEX[stage]);
+        if (stage !== 'loading') setBrowserStatus('');
+      },
+      onProgress: (name, pct) => setBrowserStatus(`Downloading ${name}: ${pct}%`),
+    });
+    return {
+      ...result,
+      message: 'AGE_OVER_18: VERIFIED (proved in your browser)',
+      thresholdDate: input.thresholdDate,
+      stages: [...stages, { name: 'proof_complete', status: 'complete', detail: `Proved in your browser in ${result.proofDuration}ms` }],
+    };
+  };
+
   const handleGenerateSigned = async () => {
     setLoading(true);
     setSignedFailure(null);
+    setBrowserStatus('');
     setOnChainResults((prev) => ({ ...prev, signed: null }));
     try {
-      let res;
-      if (signedSource === UPLOADED) {
-        const formData = new FormData();
-        formData.append('image', source.file);
-        res = await axios.post('/api/signed-proof', formData);
-      } else {
-        res = await axios.post('/api/signed-proof', { scenario: signedSource });
-      }
-      setResults((prev) => ({ ...prev, signed: res.data }));
-      triggerOnChainVerification(res.data, 'signed');
+      const result =
+        proveWhere === 'browser' ? await proveSignedInBrowser() : (await postCredentialSource('/api/signed-proof')).data;
+      setResults((prev) => ({ ...prev, signed: result }));
+      triggerOnChainVerification(result, 'signed');
     } catch (err) {
-      setSignedFailure(err.response?.data || { error: 'Server unreachable.' });
+      setSignedFailure(err.failure || err.response?.data || { error: err.message || 'Server unreachable.' });
     } finally {
       setLoading(false);
+      setBrowserStatus('');
     }
   };
 
@@ -217,7 +275,9 @@ function ProofStep({ userId, userName, source, onStartOver }) {
       <div className="card">
         <h2 className="card-title">Generating {tabLabel}</h2>
         <p className="card-description">
-          {activeTab === 'signed'
+          {inBrowser
+            ? 'Your device is generating the proof. The server never sees the private inputs.'
+            : activeTab === 'signed'
             ? 'Verifying the issuer signature and the age check in one 256,574-constraint circuit. This takes about 4 seconds.'
             : 'Running the Groth16 zk-SNARK circuit. This may take a few seconds.'}
         </p>
@@ -240,6 +300,7 @@ function ProofStep({ userId, userName, source, onStartOver }) {
               </div>
             ))}
           </div>
+          {browserStatus && <div className="browser-status">{browserStatus}</div>}
         </div>
       </div>
     );
@@ -288,6 +349,24 @@ function ProofStep({ userId, userName, source, onStartOver }) {
                 </button>
               ))}
             </div>
+            <label className="name-input-label">Where to prove</label>
+            <div className="option-group">
+              {PROVE_WHERE.map((opt) => (
+                <button
+                  key={opt.key}
+                  className={`option-button ${proveWhere === opt.key ? 'selected' : ''}`}
+                  onClick={() => setProveWhere(opt.key)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {proveWhere === 'browser' && (
+              <p className="card-description">
+                The server only issues and signs the credential. Your browser generates the proof, so no server
+                sees the private inputs. The 135 MB proving key downloads once and is cached.
+              </p>
+            )}
             <div className="step-actions">
               <button className="btn btn-primary btn-full" onClick={handleGenerateSigned}>
                 Generate Signed Credential Proof

@@ -89,7 +89,7 @@ function App() {
       </main>
 
       <footer className="footer">
-        Raw identity data never stored or transmitted &middot; ZK proofs via Groth16 &middot; Blockchain-ready
+        Raw identity data never stored &middot; ZK proofs via Groth16 &middot; Verifiable on Ethereum Sepolia
       </footer>
     </div>
   );

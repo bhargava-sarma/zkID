@@ -10,7 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const DEFAULT_SOURCE = path.join(__dirname, '..', '..', 'mock-issuer', 'circuit_inputs.json');
+const DEFAULT_SOURCE = path.join(__dirname, '..', '..', '..', 'mock-issuer', 'circuit_inputs.json');
 const PATTERN = '"dob":"';
 const TAMPER_MODES = ['signature', 'date', 'modulus'];
 

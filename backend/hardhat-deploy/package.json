@@ -8,7 +8,8 @@
     "deploy:age": "hardhat deploy-verifier --contract AgeVerifier --network sepolia",
     "deploy:name": "hardhat deploy-verifier --contract NameVerifier --network sepolia",
     "deploy:gender": "hardhat deploy-verifier --contract GenderVerifier --network sepolia",
-    "deploy:credential": "hardhat deploy-verifier --contract CredentialAgeVerifier --network sepolia"
+    "deploy:credential": "hardhat deploy-verifier --contract CredentialAgeVerifier --network sepolia",
+    "verify": "hardhat verify-verifiers --network sepolia"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^3.0.0",

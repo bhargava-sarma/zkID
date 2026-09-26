@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "fetch-circuit": "node ../experiments/credential-age-proof/fetch_artifacts.js"
+    "fetch-circuit": "node circuits/credential-age-proof/fetch_artifacts.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
