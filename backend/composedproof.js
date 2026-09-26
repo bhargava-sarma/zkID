@@ -17,7 +17,7 @@ const CAP_VKEY = path.join(CAP_DIR, 'verification_key.json');
 async function generateComposedProof(circuitInputs, isoDob) {
   for (const [label, p] of [['wasm', CAP_WASM], ['zkey', CAP_ZKEY], ['vkey', CAP_VKEY]]) {
     if (!fs.existsSync(p)) {
-      throw unavailable('artifact_missing', `Composed-circuit ${label} not found at ${p}.`);
+      throw unavailable('artifact_missing', `Composed-circuit ${label} not found at ${p}. Run: npm run fetch-circuit`);
     }
   }
 

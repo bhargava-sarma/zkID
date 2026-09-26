@@ -7,9 +7,13 @@ cd "$(dirname "$0")"
 
 npm install --silent
 
+# Hermez ceremony file, mirrored in the zkID release (the original hosts are gone).
+PTAU_URL=https://github.com/bhargava-sarma/zkID/releases/download/circuit-v1/powersOfTau28_hez_final_12.ptau
+PTAU_B2=ded2694169b7b08e898f736d5de95af87c3f1a64594013351b1a796dbee393bd825f88f9468c84505ddd11eb0b1465ac9b43b9064aa8ec97f2b73e04758b8a4a
 if [ ! -f pot12_final.ptau ]; then
-    wget -q https://hermez.s3-eu-west-1.amazonaws.com/powersOfTau28_hez_final_12.ptau -O pot12_final.ptau
+    curl -fsSL "$PTAU_URL" -o pot12_final.ptau
 fi
+echo "$PTAU_B2  pot12_final.ptau" | b2sum -c --quiet
 
 setup_circuit() {
     local NAME=$1

@@ -1,0 +1,23 @@
+{
+  "release": "https://github.com/bhargava-sarma/zkID/releases/download/circuit-v1",
+  "files": [
+    {
+      "name": "cap_final.zkey",
+      "path": "cap_final.zkey",
+      "bytes": 133277337,
+      "sha256": "4aac99939c450b553e5409db13113d8651a4ca544904cb3d63c24f09ff3e4abf"
+    },
+    {
+      "name": "credential_age_proof.wasm",
+      "path": "credential_age_proof_js/credential_age_proof.wasm",
+      "bytes": 1400446,
+      "sha256": "bd875c6ff226a37461022d0463a3e87d7810ac326a658f7866542c311af22607"
+    },
+    {
+      "name": "verification_key.json",
+      "path": "verification_key.json",
+      "bytes": 6037,
+      "sha256": "4fdaf59e6d366733a8a5b9550638dc8ca38132fd6d884e4c931f15166b9d5f4e"
+    }
+  ]
+}

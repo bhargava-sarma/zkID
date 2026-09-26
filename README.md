@@ -45,14 +45,16 @@ The credential circuit combines SHA-256, RSA-2048 (`RSAVerifier65537(121, 17)`),
 ## Quick start
 
 ```bash
-cp .env.example .env                          # SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
-cd backend  && npm install && npm run dev     # API on :3001
-cd frontend && npm install && npm run dev     # UI on :5173
+cp .env.example .env                                                 # SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+cd backend  && npm install && npm run fetch-circuit && npm run dev   # API on :3001
+cd frontend && npm install && npm run dev                            # UI on :5173
 ```
 
 Open `http://localhost:5173`, upload an Aadhaar image or pick a demo scenario, then generate an issuer-signed proof in the **Prove** step.
 
-Issuer-signed proof from the command line (after building the credential circuit, below):
+`npm run fetch-circuit` downloads the credential circuit's proving key, wasm and verification key (~135 MB) from the [`circuit-v1` release](https://github.com/bhargava-sarma/zkID/releases/tag/circuit-v1) and checks each file's SHA-256. These are the exact files the deployed `CredentialAgeVerifier` was built from.
+
+Issuer-signed proof from the command line:
 
 ```bash
 curl -s -X POST localhost:3001/api/signed-proof \
@@ -79,16 +81,22 @@ The backend uses the service role key, which stays on the server. The browser on
 </details>
 
 <details>
-<summary><b>Build the credential circuit</b></summary>
+<summary><b>Verify or rebuild the credential circuit</b></summary>
 
-The proving key is 128 MB, so it is built locally rather than committed. This needs `circom` 2.x and `snarkjs`.
+Needs `circom` 2.x and `snarkjs`. The Hermez Powers of Tau file is mirrored in the release; its BLAKE2b hash matches the one published by snarkjs.
 
 ```bash
 cd experiments/credential-age-proof
 npm install
 circom circuits/credential_age_proof.circom --r1cs --wasm --sym -l node_modules -o .
-curl -sL -o powersOfTau28_hez_final_19.ptau \
-  https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_19.ptau
+curl -fL -o powersOfTau28_hez_final_19.ptau \
+  https://github.com/bhargava-sarma/zkID/releases/download/circuit-v1/powersOfTau28_hez_final_19.ptau
+echo "bca9d8b04242f175189872c42ceaa21e2951e0f0f272a0cc54fc37193ff6648600eaf1c555c70cdedfaf9fb74927de7aa1d33dc1e2a7f1a50619484989da0887  powersOfTau28_hez_final_19.ptau" | b2sum -c
+
+# Verify the published key was derived from this circuit and ceremony
+snarkjs zkey verify credential_age_proof.r1cs powersOfTau28_hez_final_19.ptau cap_final.zkey
+
+# Or build a new key from scratch
 snarkjs groth16 setup credential_age_proof.r1cs powersOfTau28_hez_final_19.ptau cap_0000.zkey
 snarkjs zkey contribute cap_0000.zkey cap_final.zkey -n="zkID" -e="$(openssl rand -hex 32)"
 snarkjs zkey export verificationkey cap_final.zkey verification_key.json
