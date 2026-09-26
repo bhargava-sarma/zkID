@@ -1,18 +1,5 @@
-/**
- * Deploys ONLY the AgeVerifier, then merges the new address into
- * abis/deployed-addresses.json without disturbing the other entries.
- *
- * Deliberately separate from deploy.js, which deploys all three verifiers.
- * Re-running that would mint new NameVerifier and GenderVerifier addresses for
- * circuits that have not changed, orphaning working deployments for no reason.
- *
- * The previous AgeVerifier address is recorded under `retired` rather than
- * overwritten, so an address seen in an old proof or transaction can still be
- * accounted for.
- *
- * Usage:
- *   npx hardhat run scripts/deploy-age.js --network amoy
- */
+// Deploys only AgeVerifier and merges its address into abis/deployed-addresses.json.
+// The previous address is kept under `retired`.
 
 const fs = require("fs");
 const path = require("path");
@@ -54,9 +41,7 @@ async function main() {
     AgeVerifier: address,
     retired: {
       ...(existing.retired || {}),
-      // Superseded when the age circuit moved from days-since-epoch (2 public
-      // signals) to date comparison (1). The old contract is still on-chain and
-      // still verifies old proofs, but its ABI is incompatible with the new one.
+      // days-since-epoch verifier: 2 public signals, ABI-incompatible with v2.
       AgeVerifier_v1_dobDays: previous || null,
     },
     _meta: {

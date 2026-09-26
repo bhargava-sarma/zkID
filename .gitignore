@@ -1,67 +1,28 @@
-# ---- Secrets ----
+# Secrets
 .env
 .env.local
 .env.*.local
 .env.hardhat
 !.env.example
 
-# ---- Dependencies ----
 node_modules/
-
-# ---- Build output ----
 dist/
 build/
+*.log
+.DS_Store
 
-# ---- Hardhat ----
+# Hardhat
 backend/hardhat-deploy/artifacts/
 backend/hardhat-deploy/cache/
+backend/hardhat-deploy/abis/deployed-addresses.json
 
-# ---- Large regenerable artifacts ----
-# Tesseract language pack, auto-downloaded on first OCR run
+# Downloaded on demand
 backend/eng.traineddata
-# Powers of Tau ceremony file, downloaded by circuits/setup_circuit.sh
 backend/circuits/*.ptau
 
-# ---- Experiments ----
-# Deny-by-default. These directories hold GBs of regenerable binaries (ptau,
-# zkeys, r1cs, sym, witness, wasm) that must never be committed -- several exceed
-# GitHub's 100MB per-file limit on their own. Only the small source files needed
-# to reproduce each experiment are carved back in below.
-# To track a new source file here, add an explicit negation; anything not listed
-# stays ignored no matter what lands in the directory.
-#
-# NOTE: credential-age-proof/ is not purely an experiment any more --
-# backend/composedproof.js requires gen_input.js from it at runtime. Omitting
-# that carve-out made a fresh clone fail to boot with "Cannot find module".
-# Source files there are load-bearing; treat them as such.
-experiments/*
-!experiments/rsa-baseline/
-experiments/rsa-baseline/*
-!experiments/rsa-baseline/README.md
-!experiments/rsa-baseline/package.json
-!experiments/rsa-baseline/package-lock.json
-!experiments/rsa-baseline/gen_input.js
-!experiments/rsa-baseline/circuits/
-!experiments/rsa-baseline/vectors/
-!experiments/rsa-mock-issuer/
-experiments/rsa-mock-issuer/*
-!experiments/rsa-mock-issuer/README.md
-!experiments/rsa-mock-issuer/precheck_rsa.js
-!experiments/rsa-mock-issuer/gen_input_mock_issuer.js
-!experiments/credential-age-proof/
+# Composed circuit: sources only (build artifacts exceed GitHub's 100 MB limit)
 experiments/credential-age-proof/*
-!experiments/credential-age-proof/README.md
-!experiments/credential-age-proof/gen_input.js
 !experiments/credential-age-proof/circuits/
-
-# ---- Mock issuer key material ----
-# NOT ignored, deliberately. mock-issuer/*.pem is throwaway mock signing material
-# with no real-world value; tracking it lets anyone cloning the repo re-sign
-# credentials and reproduce the ZK circuit inputs exactly. See mock-issuer/README.md.
-# If a secret scanner objects, uncomment the line below and regenerate per that README.
-# mock-issuer/mock_issuer_private.pem
-
-# ---- Logs / OS ----
-*.log
-npm-debug.log*
-.DS_Store
+!experiments/credential-age-proof/gen_input.js
+!experiments/credential-age-proof/package.json
+!experiments/credential-age-proof/package-lock.json

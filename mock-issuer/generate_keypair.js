@@ -1,40 +1,18 @@
 #!/usr/bin/env node
-/**
- * Mock issuer keypair generation.
- *
- * Produces the RSA-2048 keypair that stands in for a government issuer's signing
- * key. Kept separate from sign_credential.js on purpose: re-signing a payload must
- * never silently rotate the key, because rotating it invalidates every credential
- * and every circuit input derived from the old modulus.
- *
- * Usage:
- *   node generate_keypair.js            # generates, refuses to clobber existing keys
- *   node generate_keypair.js --force    # rotates the key (invalidates signed_credential.json)
- */
+// Generates the mock issuer's RSA-2048 keypair.
+// Refuses to overwrite existing keys unless --force: rotating the key invalidates
+// every signed credential and circuit input.
 
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-// =============================================================================
-// Parameters
-// =============================================================================
-
-// 2048 bits mirrors real-world RSA issuer key sizing. The payload format in this
-// project is custom, but the key strength is not a toy value.
 const KEY_BITS = 2048;
-
-// e = 65537 is not merely Node's default; it is effectively mandatory here.
-// The common Circom RSA templates (zk-email's RSAVerifier65537, circom-rsa-verify)
-// hardcode this exponent, so any other value would make Task 2's circuit unusable.
+// Hardcoded by RSAVerifier65537 in the circuit.
 const PUBLIC_EXPONENT = 65537;
 
 const PRIVATE_KEY_PATH = path.join(__dirname, 'mock_issuer_private.pem');
 const PUBLIC_KEY_PATH = path.join(__dirname, 'mock_issuer_public.pem');
-
-// =============================================================================
-// Main
-// =============================================================================
 
 function main() {
   const force = process.argv.includes('--force');
@@ -56,20 +34,15 @@ function main() {
   const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
     modulusLength: KEY_BITS,
     publicExponent: PUBLIC_EXPONENT,
-    // SPKI ("BEGIN PUBLIC KEY") is what `openssl dgst -verify` expects, so the
-    // credential stays verifiable outside Node without a format conversion.
     publicKeyEncoding: { type: 'spki', format: 'pem' },
     privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
   });
 
   console.log(`[KEYGEN] Generated in ${Date.now() - started}ms`);
 
-  // 0600 on the private key. It is mock material with no real-world value, but
-  // treating it as a secret keeps the demo from teaching the wrong habit.
   fs.writeFileSync(PRIVATE_KEY_PATH, privateKey, { mode: 0o600 });
   fs.writeFileSync(PUBLIC_KEY_PATH, publicKey);
 
-  // Echo the modulus so the caller can eyeball that the key actually changed.
   const jwk = crypto.createPublicKey(publicKey).export({ format: 'jwk' });
   const modulusHex = Buffer.from(jwk.n, 'base64url').toString('hex');
 

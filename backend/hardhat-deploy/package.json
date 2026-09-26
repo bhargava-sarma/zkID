@@ -4,9 +4,8 @@
   "description": "Hardhat deployment for ZK-KYC Groth16 verifier contracts",
   "scripts": {
     "compile": "npx hardhat compile",
-    "deploy:cardona": "npx hardhat run scripts/deploy.js --network polygonCardona",
-    "deploy:amoy": "npx hardhat run scripts/deploy.js --network amoy",
-    "test": "npx hardhat test"
+    "deploy:age": "npx hardhat run scripts/deploy-age.js --network amoy",
+    "deploy:all": "npx hardhat run scripts/deploy.js --network amoy"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^3.0.0",

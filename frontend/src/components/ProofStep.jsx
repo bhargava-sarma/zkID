@@ -21,28 +21,23 @@ const GENDER_OPTIONS = [
   { code: 3, label: 'Other' },
 ];
 
-function ProofStep({ userId, userName, onProofComplete, onStartOver }) {
+function ProofStep({ userId, userName, onStartOver }) {
   const [activeTab, setActiveTab] = useState('age');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [results, setResults] = useState({ age: null, name: null, gender: null });
   const [currentStage, setCurrentStage] = useState(0);
 
-  // Name proof inputs
   const [claimedName, setClaimedName] = useState(userName || '');
 
-  // Gender proof inputs
   const [claimedGender, setClaimedGender] = useState(1);
 
-  // Collapsible state
   const [proofOpen, setProofOpen] = useState(false);
   const [signalsOpen, setSignalsOpen] = useState(false);
 
-  // On-chain verification state
   const [onChainResults, setOnChainResults] = useState({ age: null, name: null });
   const [onChainLoading, setOnChainLoading] = useState({ age: false, name: false });
 
-  // Animate proof stages during loading
   useEffect(() => {
     if (!loading) return;
     setCurrentStage(0);
@@ -52,14 +47,13 @@ function ProofStep({ userId, userName, onProofComplete, onStartOver }) {
     return () => clearInterval(interval);
   }, [loading]);
 
-  // Reset collapsibles when switching tabs
   useEffect(() => {
     setProofOpen(false);
     setSignalsOpen(false);
     setError(null);
   }, [activeTab]);
 
-  // Trigger on-chain verification after a successful local proof (age or name only)
+  // Only age and name have deployed verifiers.
   const triggerOnChainVerification = async (proofData, proofType) => {
     if (proofType !== 'age' && proofType !== 'name') return;
     if (!proofData.isValid || !proofData.proof || !proofData.publicSignals) return;
@@ -85,8 +79,6 @@ function ProofStep({ userId, userName, onProofComplete, onStartOver }) {
     try {
       const res = await axios.post('/api/generate-proof', { userId });
       setResults((prev) => ({ ...prev, age: res.data }));
-      if (onProofComplete) onProofComplete(res.data);
-      // Auto-trigger on-chain verification
       triggerOnChainVerification(res.data, 'age');
     } catch (err) {
       setError(err.response?.data?.error || 'Server unreachable.');
@@ -106,7 +98,6 @@ function ProofStep({ userId, userName, onProofComplete, onStartOver }) {
     try {
       const res = await axios.post('/api/generate-name-proof', { userId, claimedName: claimedName.trim() });
       setResults((prev) => ({ ...prev, name: res.data }));
-      // Auto-trigger on-chain verification
       triggerOnChainVerification(res.data, 'name');
     } catch (err) {
       setError(err.response?.data?.error || 'Server unreachable.');
@@ -128,7 +119,6 @@ function ProofStep({ userId, userName, onProofComplete, onStartOver }) {
     }
   };
 
-  // Loading state
   if (loading) {
     const tabLabel = TABS.find((t) => t.key === activeTab)?.label || 'Proof';
     return (
@@ -173,7 +163,6 @@ function ProofStep({ userId, userName, onProofComplete, onStartOver }) {
         Each proof uses a separate Groth16 zk-SNARK circuit.
       </p>
 
-      {/* Tab selector */}
       <div className="proof-tabs">
         {TABS.map((tab) => (
           <button
@@ -186,10 +175,7 @@ function ProofStep({ userId, userName, onProofComplete, onStartOver }) {
         ))}
       </div>
 
-      {/* Tab content */}
       <div className="proof-tab-content" key={activeTab}>
-
-        {/* ====== AGE TAB ====== */}
         {activeTab === 'age' && !currentResult && (
           <>
             <p className="card-description">
@@ -204,7 +190,6 @@ function ProofStep({ userId, userName, onProofComplete, onStartOver }) {
           </>
         )}
 
-        {/* ====== NAME TAB ====== */}
         {activeTab === 'name' && !currentResult && (
           <>
             <p className="card-description">
@@ -230,7 +215,6 @@ function ProofStep({ userId, userName, onProofComplete, onStartOver }) {
           </>
         )}
 
-        {/* ====== GENDER TAB ====== */}
         {activeTab === 'gender' && !currentResult && (
           <>
             <p className="card-description">
@@ -256,7 +240,6 @@ function ProofStep({ userId, userName, onProofComplete, onStartOver }) {
           </>
         )}
 
-        {/* ====== ERROR (with no result) ====== */}
         {error && !currentResult && activeTab === 'age' && (
           <div className="proof-failed">
             <div className="proof-failed-icon">✕</div>
@@ -265,10 +248,8 @@ function ProofStep({ userId, userName, onProofComplete, onStartOver }) {
           </div>
         )}
 
-        {/* ====== RESULT DISPLAY ====== */}
         {currentResult && (
           <>
-            {/* Timing */}
             {(currentResult.proofDuration || currentResult.verificationDuration) && (
               <div className="proof-timing">
                 <div className="proof-timing-item">
@@ -288,7 +269,6 @@ function ProofStep({ userId, userName, onProofComplete, onStartOver }) {
               </div>
             )}
 
-            {/* Privacy Note */}
             <div className="privacy-note">
               <span className="privacy-note-icon">🔒</span>
               <div className="privacy-note-text">
@@ -304,7 +284,6 @@ function ProofStep({ userId, userName, onProofComplete, onStartOver }) {
               </div>
             </div>
 
-            {/* Panels */}
             <div className="proof-panels">
               <div className="proof-panel">
                 <div className="proof-panel-title">What Verifier Sees</div>
@@ -316,7 +295,6 @@ function ProofStep({ userId, userName, onProofComplete, onStartOver }) {
                   <div className="proof-attribute-value">{currentResult.message}</div>
                 </div>
 
-                {/* Age-specific public signals */}
                 {activeTab === 'age' && (
                   <>
                     <div className="proof-attribute">
@@ -341,7 +319,6 @@ function ProofStep({ userId, userName, onProofComplete, onStartOver }) {
                   </>
                 )}
 
-                {/* Name-specific */}
                 {activeTab === 'name' && (
                   <div className="proof-attribute">
                     <div className="proof-attribute-label">Claimed Name</div>
@@ -349,7 +326,6 @@ function ProofStep({ userId, userName, onProofComplete, onStartOver }) {
                   </div>
                 )}
 
-                {/* Gender-specific */}
                 {activeTab === 'gender' && (
                   <div className="proof-attribute">
                     <div className="proof-attribute-label">Claimed Gender</div>
@@ -388,7 +364,6 @@ function ProofStep({ userId, userName, onProofComplete, onStartOver }) {
               </div>
             </div>
 
-            {/* ====== ON-CHAIN VERIFICATION SECTION ====== */}
             {(activeTab === 'age' || activeTab === 'name') && currentResult.isValid && (
               <div className="onchain-section">
                 <div className="onchain-header">
@@ -464,7 +439,6 @@ function ProofStep({ userId, userName, onProofComplete, onStartOver }) {
               </div>
             )}
 
-            {/* Collapsible: Raw Proof */}
             <div className="collapsible">
               <div className="collapsible-header" onClick={() => setProofOpen(!proofOpen)}>
                 <span className="collapsible-title">Raw ZK Proof (Groth16)</span>
@@ -477,7 +451,6 @@ function ProofStep({ userId, userName, onProofComplete, onStartOver }) {
               </div>
             </div>
 
-            {/* Collapsible: Public Signals */}
             <div className="collapsible">
               <div className="collapsible-header" onClick={() => setSignalsOpen(!signalsOpen)}>
                 <span className="collapsible-title">Public Signals</span>
@@ -493,7 +466,6 @@ function ProofStep({ userId, userName, onProofComplete, onStartOver }) {
         )}
       </div>
 
-      {/* Start Over */}
       {onStartOver && (
         <div className="restart-btn">
           <button className="btn btn-outline" onClick={onStartOver}>

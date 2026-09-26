@@ -1,21 +1,11 @@
 #!/usr/bin/env node
-/**
- * Builds input.json for CredentialAgeProof(119) from a signed mock credential.
- *
- * The circuit takes the signed payload bytes, not a date -- the date is
- * extracted in-circuit. There is deliberately no way to supply a date
- * independently of the bytes the signature covers.
- *
- * Usage:
- *   node gen_input.js [--from <circuit_inputs.json>] [--out <file>]
- *                     [--threshold <YYYYMMDD>] [--tamper=<mode>]
- *
- * Tamper modes, for the negative controls:
- *   signature   flip the low bit of signature limb 0
- *   date        rewrite the DOB digits inside msg[] to a much earlier year,
- *               leaving the signature untouched -- the binding test
- *   modulus     flip the low bit of modulus limb 0
- */
+// Builds input.json for CredentialAgeProof(119) from mock-issuer/circuit_inputs.json.
+//
+// Usage: node gen_input.js [--from <file>] [--out <file>] [--threshold <YYYYMMDD>] [--tamper=<mode>]
+// Tamper modes (negative controls):
+//   signature  flip the low bit of signature limb 0
+//   date       rewrite the signed DOB year, leaving the signature untouched
+//   modulus    flip the low bit of modulus limb 0
 
 const fs = require('fs');
 const path = require('path');
@@ -29,19 +19,6 @@ function arg(name, fallback) {
   return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
 }
 
-/**
- * Builds the CredentialAgeProof(119) input object from a circuit_inputs-shaped
- * object, entirely in memory.
- *
- * Pure and file-free so the backend can call it on a credential it just signed
- * from OCR output, rather than round-tripping through disk. The CLI below is a
- * thin wrapper over it.
- *
- * @param {object} ci circuit_inputs.json shape (message_bytes, signature_limbs, modulus_limbs)
- * @param {number} threshold Encoded threshold date, YYYYMMDD
- * @param {string|null} [tamper] One of TAMPER_MODES, for negative controls
- * @returns {{input: object, dobIndex: number, dobValue: string}}
- */
 function buildCircuitInput(ci, threshold, tamper = null) {
   if (tamper && !TAMPER_MODES.includes(tamper)) {
     throw new Error(`--tamper must be one of: ${TAMPER_MODES.join(', ')}. Got "${tamper}".`);
@@ -52,8 +29,7 @@ function buildCircuitInput(ci, threshold, tamper = null) {
     throw new Error(`Expected a 119-byte payload, got ${msg.length}. Re-run sign_credential.js.`);
   }
 
-  // Locate the key by searching the actual bytes -- the circuit does the same
-  // thing in-constraints, so this must agree with it or witness generation fails.
+  // Must agree with the circuit's own scan, which asserts exactly one match.
   const asText = Buffer.from(msg).toString('latin1');
   const dobIndex = asText.indexOf(PATTERN);
   if (dobIndex === -1) {
@@ -75,8 +51,7 @@ function buildCircuitInput(ci, threshold, tamper = null) {
   if (tamper === 'signature' || tamper === 'modulus') {
     input[tamper][0] = (BigInt(input[tamper][0]) ^ 1n).toString();
   } else if (tamper === 'date') {
-    // Rewrite the year in place: "1998" -> "1888". The signature is left alone,
-    // so this is exactly the attack of claiming a date other than the signed one.
+    // "1998" -> "1888"
     const yearAt = dobIndex + PATTERN.length;
     input.msg[yearAt + 1] = '8'.charCodeAt(0);
     input.msg[yearAt + 2] = '8'.charCodeAt(0);
@@ -113,8 +88,6 @@ function main() {
   console.log(`[${tag}] wrote ${path.basename(outPath)}`);
 }
 
-// CLI only when invoked directly; the backend requires this module to build
-// circuit inputs in memory for a credential it just signed.
 if (require.main === module) {
   try {
     main();
@@ -124,4 +97,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { buildCircuitInput, PATTERN, TAMPER_MODES };
+module.exports = { buildCircuitInput };

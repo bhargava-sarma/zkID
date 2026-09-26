@@ -13,17 +13,8 @@ module.exports = {
     }
   },
   networks: {
-    polygonCardona: {
-      url: process.env.RPC_URL || "https://rpc.cardona.zkevm-rpc.com",
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-      chainId: 2442,
-      gasPrice: "auto"
-    },
     amoy: {
-      // Overridable because the official endpoint has been unreliable — it was
-      // returning nothing at all during the v2 verifier deploy. Same pattern as
-      // polygonCardona above. Any Amoy (chainId 80002) RPC works.
-      url: process.env.AMOY_RPC_URL || "https://rpc-amoy.polygon.technology",
+      url: process.env.AMOY_RPC_URL || "https://polygon-amoy-bor-rpc.publicnode.com",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 80002,
       gasPrice: "auto"

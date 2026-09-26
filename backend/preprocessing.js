@@ -1,113 +1,77 @@
 const crypto = require('crypto');
 
-/**
- * Convert a name string into a BigInt suitable for circuit input.
- * Uses SHA-256 and takes the first 31 bytes to fit within BN128 field.
- */
+// Shown in the UI. Values are redacted server-side, so only labels are listed.
+const TRANSFORMATIONS = [
+  {
+    label: 'Raw DOB from OCR',
+    explanation: 'Date of birth as extracted from the Aadhaar card via OCR',
+  },
+  {
+    label: 'Normalized ISO Date',
+    explanation: 'Converted to ISO 8601 format for standardized processing',
+  },
+  {
+    label: 'Encoded Date (YYYYMMDD)',
+    explanation:
+      'Date encoded as year*10000 + month*100 + day, so integer comparison is chronological comparison. This is the private input to the Age ZK circuit.',
+  },
+  {
+    label: 'Aadhaar SHA-256 Hash',
+    explanation: 'One-way cryptographic hash. Only the hash is stored; the original number is discarded.',
+  },
+  {
+    label: 'Name Hash (Circuit Input)',
+    explanation:
+      'SHA-256 hash of the normalized name, converted to a BigInt. This is the private input to the Name ZK circuit.',
+  },
+  {
+    label: 'Gender Code',
+    explanation:
+      'Gender encoded as integer (1=Male, 2=Female, 3=Other). This is the private input to the Gender ZK circuit.',
+  },
+];
+
+// First 31 bytes of SHA-256, so the value fits the BN128 field.
 function computeNameHash(name) {
-  const normalized = name.toLowerCase().trim();
-  const hash = crypto.createHash('sha256').update(normalized).digest('hex');
-  // Take first 31 bytes (62 hex chars) to stay within BN128 field prime
-  const truncated = hash.substring(0, 62);
-  return BigInt('0x' + truncated).toString();
+  const hash = crypto.createHash('sha256').update(name.toLowerCase().trim()).digest('hex');
+  return BigInt('0x' + hash.substring(0, 62)).toString();
 }
 
-/**
- * Convert gender string to integer code for circuit input.
- * Male=1, Female=2, Other=3, null=0
- */
+// Male=1, Female=2, Other=3, missing=0.
 function genderToCode(gender) {
   if (!gender) return 0;
   const g = gender.toLowerCase();
   if (g === 'male') return 1;
   if (g === 'female') return 2;
-  return 3; // Other / Transgender
+  return 3;
 }
 
 function preprocessData(name, dobString, aadhaarNumber, gender) {
   console.log('[PREPROCESS] Starting data transformation...');
 
-  // Step 1: Normalize DOB from DD/MM/YYYY to ISO YYYY-MM-DD
+  // DD/MM/YYYY -> year*10000 + month*100 + day: integer order is date order.
   const [day, month, year] = dobString.split('/');
-  const isoDate = `${year}-${month}-${day}`;
-  console.log(`[PREPROCESS] DOB normalized — year: ${year}`);
-
-  // Step 2: Encode DOB as a single comparable integer: year*10000 + month*100 + day.
-  // Integer ordering on this encoding is chronological ordering on the date, so
-  // the age circuit needs one comparison and no date arithmetic. This replaced
-  // days-since-epoch, whose 18*365 threshold ignored leap days.
   const dobEncoded = Number(year) * 10000 + Number(month) * 100 + Number(day);
   console.log(`[PREPROCESS] DOB encoded: ${dobEncoded}`);
 
-  // Step 3: Hash Aadhaar number with SHA-256
-  const aadhaarClean = aadhaarNumber.replace(/\s/g, '');
-  const aadhaarHash = crypto.createHash('sha256').update(aadhaarClean).digest('hex');
+  // The raw Aadhaar number is not returned: it is discarded here.
+  const aadhaarHash = crypto.createHash('sha256').update(aadhaarNumber.replace(/\s/g, '')).digest('hex');
   console.log(`[PREPROCESS] Aadhaar hashed: ${aadhaarHash.substring(0, 12)}...`);
 
-  // Step 4: Compute name hash (BigInt string for circuit input)
   const nameHash = computeNameHash(name);
   console.log(`[PREPROCESS] Name hashed: ${nameHash.substring(0, 16)}...`);
 
-  // Step 5: Convert gender to code
   const genderCode = genderToCode(gender);
-  const genderLabel = gender || 'Unknown';
-  console.log(`[PREPROCESS] Gender: ${genderLabel} → code ${genderCode}`);
+  console.log(`[PREPROCESS] Gender: ${gender || 'Unknown'} → code ${genderCode}`);
 
-  console.log('[PREPROCESS] Transformation complete');
-
-  // Return both display data and processed values
-  // Raw Aadhaar is NOT included in return — it's discarded here
   return {
     name,
-    rawDob: dobString,
-    isoDate,
     dobEncoded,
     aadhaarHash,
     nameHash,
-    gender: genderLabel,
     genderCode,
-    // Transformation steps for frontend display
-    transformations: [
-      {
-        label: 'Raw DOB from OCR',
-        value: dobString,
-        explanation: 'Date of birth as extracted from the Aadhaar card via OCR',
-      },
-      {
-        label: 'Normalized ISO Date',
-        value: isoDate,
-        explanation: 'Converted to ISO 8601 format for standardized processing',
-      },
-      {
-        label: 'Encoded Date (YYYYMMDD)',
-        value: `${dobEncoded}`,
-        explanation:
-          'Date encoded as year*10000 + month*100 + day, so integer comparison is chronological comparison. This is the private input to the Age ZK circuit.',
-      },
-      {
-        label: 'Aadhaar SHA-256 Hash',
-        value: aadhaarHash.substring(0, 20) + '...',
-        explanation:
-          'One-way cryptographic hash; only the hash is ever stored. On this path the ' +
-          'original number is discarded here. The signed-credential path ' +
-          '(/api/signed-proof) instead holds it in memory just long enough to build the ' +
-          'signed payload, where it is a private circuit input — still never logged, ' +
-          'written to disk, or stored in the database.',
-      },
-      {
-        label: 'Name Hash (Circuit Input)',
-        value: nameHash.substring(0, 24) + '...',
-        explanation:
-          'SHA-256 hash of the normalized name, converted to a BigInt. This is the private input to the Name ZK circuit.',
-      },
-      {
-        label: 'Gender Code',
-        value: `${genderLabel} → ${genderCode}`,
-        explanation:
-          'Gender encoded as integer (1=Male, 2=Female, 3=Other). This is the private input to the Gender ZK circuit.',
-      },
-    ],
+    transformations: TRANSFORMATIONS,
   };
 }
 
-module.exports = { preprocessData, computeNameHash, genderToCode };
+module.exports = { preprocessData, computeNameHash };

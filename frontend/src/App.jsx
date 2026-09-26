@@ -13,15 +13,10 @@ const STEPS = [
 
 function App() {
   const [currentStep, setCurrentStep] = useState(1);
-  const [stepData, setStepData] = useState({
-    upload: null,
-    proof: null,
-  });
-  const [pipelineStatus, setPipelineStatus] = useState('idle');
+  const [uploadData, setUploadData] = useState(null);
 
   const handleUploadComplete = (data) => {
-    setStepData((prev) => ({ ...prev, upload: data }));
-    setPipelineStatus('complete');
+    setUploadData(data);
     setCurrentStep(2);
   };
 
@@ -29,14 +24,9 @@ function App() {
     setCurrentStep((prev) => Math.min(prev + 1, 4));
   };
 
-  const handleProofComplete = (data) => {
-    setStepData((prev) => ({ ...prev, proof: data }));
-  };
-
   const handleStartOver = () => {
     setCurrentStep(1);
-    setStepData({ upload: null, proof: null });
-    setPipelineStatus('idle');
+    setUploadData(null);
   };
 
   return (
@@ -76,28 +66,18 @@ function App() {
 
       <main>
         {currentStep === 1 && (
-          <UploadStep
-            onComplete={handleUploadComplete}
-            setPipelineStatus={setPipelineStatus}
-          />
+          <UploadStep onComplete={handleUploadComplete} />
         )}
         {currentStep === 2 && (
-          <PreprocessStep
-            data={stepData.upload}
-            onNext={handleNextStep}
-          />
+          <PreprocessStep data={uploadData} onNext={handleNextStep} />
         )}
         {currentStep === 3 && (
-          <StorageStep
-            data={stepData.upload}
-            onNext={handleNextStep}
-          />
+          <StorageStep data={uploadData} onNext={handleNextStep} />
         )}
         {currentStep === 4 && (
           <ProofStep
-            userId={stepData.upload?.userId}
-            userName={stepData.upload?.stored?.name}
-            onProofComplete={handleProofComplete}
+            userId={uploadData?.userId}
+            userName={uploadData?.stored?.name}
             onStartOver={handleStartOver}
           />
         )}

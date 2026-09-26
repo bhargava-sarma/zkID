@@ -1,13 +1,12 @@
 {
   "name": "mock-issuer",
   "version": "1.0.0",
-  "description": "Mock credential issuer for the ZK-KYC demo: RSA-2048 keypair and a signed synthetic identity payload, used as input to the Circom signature-verification circuit.",
+  "description": "Mock RSA-2048 credential issuer for the ZK-KYC demo.",
   "private": true,
   "type": "commonjs",
   "scripts": {
     "keygen": "node generate_keypair.js",
     "sign": "node sign_credential.js",
     "verify": "node verify_credential.js"
-  },
-  "dependencies": {}
+  }
 }

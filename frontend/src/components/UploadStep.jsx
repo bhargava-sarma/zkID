@@ -11,7 +11,7 @@ const PIPELINE_STAGES = [
   { key: 'supabase_stored', label: 'Data stored in Supabase' },
 ];
 
-function UploadStep({ onComplete, setPipelineStatus }) {
+function UploadStep({ onComplete }) {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -58,7 +58,6 @@ function UploadStep({ onComplete, setPipelineStatus }) {
     }
   };
 
-  // Animate stages appearing one by one
   const animateStages = (stages) => {
     setActiveStages([]);
     stages.forEach((stage, index) => {
@@ -74,9 +73,7 @@ function UploadStep({ onComplete, setPipelineStatus }) {
     setLoading(true);
     setError(null);
     setActiveStages([]);
-    if (setPipelineStatus) setPipelineStatus('processing');
 
-    // Show initial stages while waiting for response
     const preStages = [
       { name: 'upload_received', status: 'complete', detail: `${file.name}` },
       { name: 'ocr_started', status: 'running', detail: 'Tesseract OCR processing...' },
@@ -91,22 +88,18 @@ function UploadStep({ onComplete, setPipelineStatus }) {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      // Animate final stages from the response
       if (response.data.stages) {
         animateStages(response.data.stages);
-        // Wait for animations to complete
         await new Promise((resolve) => setTimeout(resolve, response.data.stages.length * 400 + 500));
       }
 
       onComplete(response.data);
     } catch (err) {
-      if (setPipelineStatus) setPipelineStatus('error');
       const message =
         err.response?.data?.error ||
         'Server unreachable. Ensure backend is running.';
       setError(message);
 
-      // Show error stages if available
       if (err.response?.data?.stages) {
         animateStages(err.response.data.stages);
       }
@@ -119,9 +112,7 @@ function UploadStep({ onComplete, setPipelineStatus }) {
     setDemoLoading(scenario);
     setError(null);
     setActiveStages([]);
-    if (setPipelineStatus) setPipelineStatus('processing');
 
-    // Show initial stage
     animateStages([
       { name: 'upload_received', status: 'running', detail: `Demo: ${scenario}...` },
     ]);
@@ -129,7 +120,6 @@ function UploadStep({ onComplete, setPipelineStatus }) {
     try {
       const response = await axios.post('/api/demo', { scenario });
 
-      // Animate stages
       if (response.data.stages) {
         animateStages(response.data.stages);
         await new Promise((resolve) => setTimeout(resolve, response.data.stages.length * 400 + 500));
@@ -137,7 +127,6 @@ function UploadStep({ onComplete, setPipelineStatus }) {
 
       onComplete(response.data);
     } catch (err) {
-      if (setPipelineStatus) setPipelineStatus('error');
       const message =
         err.response?.data?.error ||
         'Demo scenario failed.';
@@ -232,7 +221,6 @@ function UploadStep({ onComplete, setPipelineStatus }) {
         </button>
       </div>
 
-      {/* Demo Samples */}
       <div className="demo-section">
         <div className="or-divider">or try a demo scenario</div>
         <div className="demo-cards">

@@ -12,7 +12,6 @@ function PreprocessStep({ data, onNext }) {
         for the zero-knowledge proof system.
       </p>
 
-      {/* Pipeline complete indicator */}
       <div className="pipeline-complete-badge">
         <span className="badge-icon">✓</span>
         <span>All {transformations.length} transformations completed successfully</span>

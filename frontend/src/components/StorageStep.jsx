@@ -1,7 +1,7 @@
 function StorageStep({ data, onNext }) {
   if (!data) return null;
   const stored = data.stored || {};
-  const genderLabels = { 0: 'Unknown', 1: 'Male', 2: 'Female', 3: 'Other' };
+  const redacted = (value) => (value ? <span className="redacted">{value}</span> : '—');
 
   return (
     <div className="card">
@@ -25,9 +25,7 @@ function StorageStep({ data, onNext }) {
         </div>
         <div className="storage-row">
           <span className="storage-key">dob_encoded</span>
-          <span className="storage-value">
-            {stored.dob_encoded === '[protected]' ? <span className="redacted">[protected]</span> : stored.dob_encoded}
-          </span>
+          <span className="storage-value">{redacted(stored.dob_encoded)}</span>
         </div>
         <div className="storage-row">
           <span className="storage-key">aadhaar_hash</span>
@@ -43,13 +41,7 @@ function StorageStep({ data, onNext }) {
         </div>
         <div className="storage-row">
           <span className="storage-key">gender_code</span>
-          <span className="storage-value">
-            {stored.gender_code === '[protected]'
-              ? <span className="redacted">[protected]</span>
-              : stored.gender_code !== null && stored.gender_code !== undefined
-              ? `${stored.gender_code} (${genderLabels[stored.gender_code] || 'Unknown'})`
-              : '—'}
-          </span>
+          <span className="storage-value">{redacted(stored.gender_code)}</span>
         </div>
         <div className="storage-row">
           <span className="storage-key">created_at</span>

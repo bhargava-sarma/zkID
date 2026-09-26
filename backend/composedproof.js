@@ -1,69 +1,30 @@
-/**
- * Composed-circuit proof generation: RSA signature verification + in-circuit
- * field extraction + age comparison, in one proof.
- *
- * Unlike proofgen.js's AgeVerification, this does not take a date as input. The
- * date is extracted in-circuit from the very bytes the issuer's signature
- * covers, so a proof cannot assert an age that differs from the signed one.
- *
- * Artifacts are referenced from experiments/ rather than copied into backend/.
- * That couples this module to an experiments directory, which is a deliberate
- * short-term choice: the proving key is 128MB and moving it is not free.
- */
+// Composed proof: RSA signature check + in-circuit DOB extraction + age check.
+// The DOB is read from the signed bytes, so it can't differ from what the issuer signed.
 
 const snarkjs = require('snarkjs');
 const fs = require('fs');
 const path = require('path');
 
-const { buildCircuitInput } = require(
-  path.join(__dirname, '..', 'experiments', 'credential-age-proof', 'gen_input.js')
-);
-const { computeThresholdDate } = require('./proofgen');
-const { CredentialError } = require('./signedcredential');
-
 const CAP_DIR = path.join(__dirname, '..', 'experiments', 'credential-age-proof');
+const { buildCircuitInput } = require(path.join(CAP_DIR, 'gen_input.js'));
+const { computeThresholdDate } = require('./proofgen');
+const { CredentialError, unavailable } = require('./signedcredential');
+
 const CAP_WASM = path.join(CAP_DIR, 'credential_age_proof_js', 'credential_age_proof.wasm');
 const CAP_ZKEY = path.join(CAP_DIR, 'cap_final.zkey');
 const CAP_VKEY = path.join(CAP_DIR, 'verification_key.json');
 
-/** Wraps an operator-side failure: the user did nothing wrong. */
-function unavailable(reason, detail) {
-  return new CredentialError({
-    code: 'PROVING_UNAVAILABLE',
-    reason,
-    userMessage: 'Verification is temporarily unavailable. Please try again shortly.',
-    detail,
-    retryable: false,
-    status: 500,
-  });
-}
-
-/**
- * Generates and verifies a composed proof for a freshly signed credential.
- *
- * @param {object} circuitInputs Output of signedcredential.signCredential
- * @param {string} isoDob The payload's dob, YYYY-MM-DD, for the age pre-check
- * @returns {Promise<object>} proof, publicSignals, verification result and timings
- * @throws {CredentialError}
- */
 async function generateComposedProof(circuitInputs, isoDob) {
   for (const [label, p] of [['wasm', CAP_WASM], ['zkey', CAP_ZKEY], ['vkey', CAP_VKEY]]) {
     if (!fs.existsSync(p)) {
-      throw unavailable(
-        'artifact_missing',
-        `Composed-circuit ${label} not found at ${p}. Build it in experiments/credential-age-proof/.`
-      );
+      throw unavailable('artifact_missing', `Composed-circuit ${label} not found at ${p}.`);
     }
   }
 
   const thresholdDate = computeThresholdDate();
 
-  // Age is checked here BEFORE proving, not inferred from a circuit assert.
-  // The circuit enforces the same comparison, but a witness failure gives only
-  // "Assert Failed ... line: N", which is brittle to match on and cannot be
-  // distinguished from a genuine malfunction. Comparing in JS lets an underage
-  // subject get a precise, non-retryable answer, and leaves any later assert
-  // failure meaning something is actually wrong.
+  // Checked before proving so an underage subject gets a precise answer and a
+  // later circuit assert can only mean a real fault.
   const [y, m, d] = isoDob.split('-').map(Number);
   const dobEncoded = y * 10000 + m * 100 + d;
   if (dobEncoded > thresholdDate) {
@@ -90,8 +51,6 @@ async function generateComposedProof(circuitInputs, isoDob) {
   try {
     ({ proof, publicSignals } = await snarkjs.groth16.fullProve(input, CAP_WASM, CAP_ZKEY));
   } catch (err) {
-    // Everything the circuit asserts has already been checked above, so an
-    // assert failure here is a real inconsistency, not a user error.
     throw unavailable('witness_failed', `Composed proof generation failed: ${err.message}`);
   }
   const proofDuration = Date.now() - started;
@@ -121,4 +80,4 @@ async function generateComposedProof(circuitInputs, isoDob) {
   };
 }
 
-module.exports = { generateComposedProof, CAP_ZKEY };
+module.exports = { generateComposedProof };
