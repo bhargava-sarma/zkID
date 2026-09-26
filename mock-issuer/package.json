@@ -1,7 +1,7 @@
 {
   "name": "mock-issuer",
   "version": "1.0.0",
-  "description": "Mock RSA-2048 credential issuer for the ZK-KYC demo.",
+  "description": "Mock RSA-2048 credential issuer for zkID.",
   "private": true,
   "type": "commonjs",
   "scripts": {

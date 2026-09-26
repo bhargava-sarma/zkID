@@ -1,7 +1,7 @@
 {
-  "name": "zkkyc-backend",
+  "name": "zkid-backend",
   "version": "1.0.0",
-  "description": "Privacy-Preserving KYC backend with ZK proofs",
+  "description": "zkID backend: OCR, credential signing and ZK proof generation",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

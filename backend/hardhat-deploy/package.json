@@ -1,7 +1,7 @@
 {
-  "name": "zk-kyc-contracts",
+  "name": "zkid-contracts",
   "version": "1.0.0",
-  "description": "Hardhat deployment for ZK-KYC Groth16 verifier contracts",
+  "description": "zkID Groth16 verifier contracts (Polygon Amoy)",
   "scripts": {
     "compile": "npx hardhat compile",
     "deploy:age": "npx hardhat run scripts/deploy-age.js --network amoy",

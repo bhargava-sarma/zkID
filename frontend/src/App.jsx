@@ -32,8 +32,8 @@ function App() {
   return (
     <div className="app-container">
       <header className="header">
-        <h1>ZK-KYC Verification</h1>
-        <p>Privacy-Preserving Identity Verification using Zero-Knowledge Proofs</p>
+        <h1>zkID</h1>
+        <p>Zero-Knowledge Proof Framework for Cross-Institutional KYC Compliance</p>
       </header>
 
       <nav className="stepper">

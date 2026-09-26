@@ -18,7 +18,7 @@ setup_circuit() {
     circom "${NAME}.circom" --r1cs --wasm --sym -o .
     snarkjs groth16 setup "${NAME}.r1cs" pot12_final.ptau "${PREFIX}_0000.zkey"
     snarkjs zkey contribute "${PREFIX}_0000.zkey" "${PREFIX}_final.zkey" \
-        --name="ZK-KYC Demo" -v -e="zkkyc-${PREFIX}-entropy"
+        --name="zkID" -v -e="zkid-${PREFIX}-entropy"
     snarkjs zkey export verificationkey "${PREFIX}_final.zkey" "${PREFIX}_vkey.json"
     rm -f "${PREFIX}_0000.zkey"
 }
