@@ -14,7 +14,6 @@ build/
 # Hardhat
 backend/hardhat-deploy/artifacts/
 backend/hardhat-deploy/cache/
-backend/hardhat-deploy/abis/deployed-addresses.json
 
 # Downloaded on demand
 backend/eng.traineddata

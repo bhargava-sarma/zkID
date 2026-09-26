@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "description": "zkID Groth16 verifier contracts (Polygon Amoy)",
   "scripts": {
-    "compile": "npx hardhat compile",
-    "deploy:age": "npx hardhat run scripts/deploy-age.js --network amoy",
-    "deploy:all": "npx hardhat run scripts/deploy.js --network amoy"
+    "compile": "hardhat compile",
+    "deploy:age": "hardhat deploy-verifier --contract AgeVerifier --network amoy",
+    "deploy:name": "hardhat deploy-verifier --contract NameVerifier --network amoy",
+    "deploy:gender": "hardhat deploy-verifier --contract GenderVerifier --network amoy",
+    "deploy:credential": "hardhat deploy-verifier --contract CredentialAgeVerifier --network amoy"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^3.0.0",

@@ -12,7 +12,7 @@ Verify a customer once and let any institution check the result without seeing t
 
 - **Selective disclosure.** Prove age ≥ 18, a name match or a gender match. The verifier learns *yes*, never the date of birth, name or ID number.
 - **Issuer-bound proofs.** One circuit verifies an RSA-2048 signature *and* reads the date of birth from the signed bytes, so a proof can only attest to what the issuer signed. Altering one byte breaks it.
-- **Verifiable by anyone.** The age and name verifier contracts live on Polygon Amoy. Checking a proof is a free, read-only call that needs no wallet and no gas.
+- **Verifiable by anyone.** Every proof type has a Groth16 Solidity verifier for Polygon Amoy. Checking a proof is a free, read-only call that needs no wallet and no gas.
 - **Privacy by design.** Images are processed in memory and never written to disk. Only hashes and encoded values are stored, and raw ID numbers are never logged or persisted.
 - **Strict validation.** Garbled or impossible dates (like 31 Feb) and missing fields are rejected before signing. Machine-readable error codes separate *retake the photo* from *not eligible*.
 
@@ -35,10 +35,10 @@ flowchart LR
 
 | Proof | Proves | Hidden | Verification |
 |---|---|---|---|
-| **Credential age** | Issuer signed the credential, and its holder is ≥ 18 | Name, DOB, ID, gender | Off-chain · ~4 s to prove, ~7 ms to verify |
+| **Credential age** | Issuer signed the credential, and its holder is ≥ 18 | Name, DOB, ID, gender | Off-chain + on-chain · ~4 s to prove |
 | **Age** | DOB ≤ threshold date | Date of birth | Off-chain + on-chain |
 | **Name** | Name matches a claimed identity | Name | Off-chain + on-chain |
-| **Gender** | Gender matches a claimed value | Gender | Off-chain |
+| **Gender** | Gender matches a claimed value | Gender | Off-chain + on-chain |
 
 The credential circuit combines SHA-256, RSA-2048 (`RSAVerifier65537(121, 17)`), a uniqueness scan for the `"dob":"` field, digit range checks and a date comparison. That comes to **256,574 constraints** in total.
 
@@ -94,6 +94,8 @@ snarkjs zkey contribute cap_0000.zkey cap_final.zkey -n="zkID" -e="$(openssl ran
 snarkjs zkey export verificationkey cap_final.zkey verification_key.json
 rm cap_0000.zkey
 ```
+
+A new proving key needs its own on-chain verifier: export it with `snarkjs zkey export solidityverifier cap_final.zkey ../../backend/hardhat-deploy/contracts/CredentialAgeVerifier.sol`, rename the contract to `CredentialAgeVerifier`, then run `npm run deploy:credential`.
 </details>
 
 <details>
@@ -134,7 +136,14 @@ Error codes: `CREDENTIAL_UNPROCESSABLE` (retryable), `AGE_REQUIREMENT_NOT_MET`, 
 | AgeVerifier | [`0xa5075F2E83167C3c7fE5c3C3F1Fc5FCF1d378232`](https://amoy.polygonscan.com/address/0xa5075F2E83167C3c7fE5c3C3F1Fc5FCF1d378232) |
 | NameVerifier | [`0x23715a3216ACdF715a75463939A342b844dd01eE`](https://amoy.polygonscan.com/address/0x23715a3216ACdF715a75463939A342b844dd01eE) |
 
-Redeploy with `cd backend/hardhat-deploy && npm run deploy:age` (set `PRIVATE_KEY` in `.env.hardhat`).
+Addresses live in `frontend/src/contracts/addresses.json`. The UI verifies on-chain for every proof type listed there.
+
+Deploy or replace a verifier (set `PRIVATE_KEY` in `backend/hardhat-deploy/.env.hardhat`). This writes the new address to `addresses.json` for you:
+
+```bash
+cd backend/hardhat-deploy
+npm run deploy:gender        # also: deploy:credential, deploy:age, deploy:name
+```
 
 ## Project structure
 

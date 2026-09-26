@@ -1,5 +1,10 @@
 require("@nomicfoundation/hardhat-toolbox");
 require("dotenv").config({ path: ".env.hardhat" });
+const { task } = require("hardhat/config");
+
+task("deploy-verifier", "Deploy one Groth16 verifier contract")
+  .addParam("contract", "AgeVerifier | NameVerifier | GenderVerifier | CredentialAgeVerifier")
+  .setAction(async ({ contract }, hre) => require("./scripts/deploy-verifier")(hre, contract));
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {

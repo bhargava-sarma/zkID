@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { verifyOnChain } from '../contracts/onChainVerify';
+import { hasVerifier } from '../contracts/contractConfig';
 
 const PROOF_STAGES = [
   'Preparing circuit inputs...',
@@ -100,8 +101,8 @@ function ProofStep({ userId, userName, source, onStartOver }) {
   const [proofOpen, setProofOpen] = useState(false);
   const [signalsOpen, setSignalsOpen] = useState(false);
 
-  const [onChainResults, setOnChainResults] = useState({ age: null, name: null });
-  const [onChainLoading, setOnChainLoading] = useState({ age: false, name: false });
+  const [onChainResults, setOnChainResults] = useState({});
+  const [onChainLoading, setOnChainLoading] = useState({});
 
   const loadingStages = activeTab === 'signed' ? SIGNED_STAGES : PROOF_STAGES;
 
@@ -121,9 +122,8 @@ function ProofStep({ userId, userName, source, onStartOver }) {
     setSignedFailure(null);
   }, [activeTab]);
 
-  // Only age and name have deployed verifiers.
   const triggerOnChainVerification = async (proofData, proofType) => {
-    if (proofType !== 'age' && proofType !== 'name') return;
+    if (!hasVerifier(proofType)) return;
     if (!proofData.isValid || !proofData.proof || !proofData.publicSignals) return;
 
     setOnChainLoading((prev) => ({ ...prev, [proofType]: true }));
@@ -143,6 +143,7 @@ function ProofStep({ userId, userName, source, onStartOver }) {
   const handleGenerateSigned = async () => {
     setLoading(true);
     setSignedFailure(null);
+    setOnChainResults((prev) => ({ ...prev, signed: null }));
     try {
       let res;
       if (signedSource === UPLOADED) {
@@ -153,6 +154,7 @@ function ProofStep({ userId, userName, source, onStartOver }) {
         res = await axios.post('/api/signed-proof', { scenario: signedSource });
       }
       setResults((prev) => ({ ...prev, signed: res.data }));
+      triggerOnChainVerification(res.data, 'signed');
     } catch (err) {
       setSignedFailure(err.response?.data || { error: 'Server unreachable.' });
     } finally {
@@ -197,9 +199,11 @@ function ProofStep({ userId, userName, source, onStartOver }) {
   const handleGenerateGender = async () => {
     setLoading(true);
     setError(null);
+    setOnChainResults((prev) => ({ ...prev, gender: null }));
     try {
       const res = await axios.post('/api/generate-gender-proof', { userId, claimedGender });
       setResults((prev) => ({ ...prev, gender: res.data }));
+      triggerOnChainVerification(res.data, 'gender');
     } catch (err) {
       setError(err.response?.data?.error || 'Server unreachable.');
     } finally {
@@ -499,21 +503,7 @@ function ProofStep({ userId, userName, source, onStartOver }) {
               </div>
             </div>
 
-            {activeTab === 'signed' && (
-              <>
-                <StageTrace stages={currentResult.stages} />
-                <div className="step-actions">
-                  <button
-                    className="btn btn-outline btn-full"
-                    onClick={() => setResults((prev) => ({ ...prev, signed: null }))}
-                  >
-                    Try another credential
-                  </button>
-                </div>
-              </>
-            )}
-
-            {(activeTab === 'age' || activeTab === 'name') && currentResult.isValid && (
+            {hasVerifier(activeTab) && currentResult.isValid && (
               <div className="onchain-section">
                 <div className="onchain-header">
                   <span className="onchain-header-icon">⛓</span>
@@ -586,6 +576,23 @@ function ProofStep({ userId, userName, source, onStartOver }) {
                   </div>
                 )}
               </div>
+            )}
+
+            {activeTab === 'signed' && (
+              <>
+                <StageTrace stages={currentResult.stages} />
+                <div className="step-actions">
+                  <button
+                    className="btn btn-outline btn-full"
+                    onClick={() => {
+                      setResults((prev) => ({ ...prev, signed: null }));
+                      setOnChainResults((prev) => ({ ...prev, signed: null }));
+                    }}
+                  >
+                    Try another credential
+                  </button>
+                </div>
+              </>
             )}
 
             <div className="collapsible">
