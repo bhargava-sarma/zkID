@@ -15,7 +15,7 @@ const {
   padToFixedLength,
   signBytes,
   buildCircuitInputs,
-} = require(path.join(MOCK_ISSUER_DIR, 'sign_credential.js'));
+} = require('../mock-issuer/sign_credential');
 
 const PRIVATE_KEY_PATH = path.join(MOCK_ISSUER_DIR, 'mock_issuer_private.pem');
 const PUBLIC_KEY_PATH = path.join(MOCK_ISSUER_DIR, 'mock_issuer_public.pem');

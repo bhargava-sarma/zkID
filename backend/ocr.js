@@ -1,5 +1,12 @@
 const os = require('os');
 const Tesseract = require('tesseract.js');
+
+// Tesseract loads its wasm engine by path at runtime, which bundlers can't trace.
+// Resolving the files here keeps them in serverless (Vercel) bundles.
+require.resolve('tesseract.js-core/tesseract-core.wasm');
+require.resolve('tesseract.js-core/tesseract-core-simd.wasm');
+require.resolve('tesseract.js-core/tesseract-core-lstm.wasm');
+require.resolve('tesseract.js-core/tesseract-core-simd-lstm.wasm');
 const { isCalendarDate } = require('../mock-issuer/sign_credential');
 
 async function extractAadhaarData(imageBuffer) {

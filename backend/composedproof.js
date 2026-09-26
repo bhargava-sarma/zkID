@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 
 const CAP_DIR = path.join(__dirname, 'circuits', 'credential-age-proof');
-const { buildCircuitInput } = require(path.join(CAP_DIR, 'gen_input.js'));
+const { buildCircuitInput } = require('./circuits/credential-age-proof/gen_input');
 const { computeThresholdDate } = require('./proofgen');
 const { CredentialError, unavailable } = require('./signedcredential');
 

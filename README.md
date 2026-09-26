@@ -141,7 +141,7 @@ Error codes: `CREDENTIAL_UNPROCESSABLE` (retryable), `AGE_REQUIREMENT_NOT_MET`, 
 
 ## Deploy to Vercel
 
-One Vercel project serves the UI, the circuit files and the API (see [`vercel.json`](vercel.json)).
+One Vercel project runs two services, defined in [`vercel.json`](vercel.json): the frontend (UI and circuit files) and the backend (the Express API at `/api`).
 
 1. In Vercel, **Add New → Project** and import this repo. Leave the root directory as is.
 2. Add the environment variables `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
