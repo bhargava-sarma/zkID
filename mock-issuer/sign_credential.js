@@ -63,15 +63,25 @@ function validatePayload(payload) {
     }
   }
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(payload.dob)) {
-    throw new Error(`Field "dob" must be YYYY-MM-DD, got "${payload.dob}".`);
+  // YYYY-99-99: the card prints only a year of birth. It sorts after every real
+  // date in that year, so the circuit's age check can only understate age.
+  if (/^\d{4}-99-99$/.test(payload.dob)) {
+    const year = Number(payload.dob.slice(0, 4));
+    if (year < 1900 || year > new Date().getUTCFullYear()) {
+      throw new Error(`Field "dob" has an implausible year of birth: ${year}.`);
+    }
+  } else {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(payload.dob)) {
+      throw new Error(`Field "dob" must be YYYY-MM-DD, or YYYY-99-99 for a year of birth, got "${payload.dob}".`);
+    }
+    const [year, month, day] = payload.dob.split('-').map(Number);
+    if (!isCalendarDate(year, month, day)) {
+      throw new Error(`Field "dob" is not a real calendar date: "${payload.dob}".`);
+    }
   }
-  const [year, month, day] = payload.dob.split('-').map(Number);
-  if (!isCalendarDate(year, month, day)) {
-    throw new Error(`Field "dob" is not a real calendar date: "${payload.dob}".`);
-  }
-  if (!/^\d{12}$/.test(payload.id_number)) {
-    throw new Error(`Field "id_number" must be exactly 12 digits.`);
+  // XXXXXXXX + 4 digits: a masked Aadhaar, which prints only the last 4 digits.
+  if (!/^(\d{12}|X{8}\d{4})$/.test(payload.id_number)) {
+    throw new Error(`Field "id_number" must be 12 digits, or XXXXXXXX and 4 digits for a masked Aadhaar.`);
   }
   if (!['M', 'F', 'O'].includes(payload.gender)) {
     throw new Error(`Field "gender" must be one of M, F, O. Got "${payload.gender}".`);

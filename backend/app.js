@@ -5,10 +5,11 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const { extractAadhaarData } = require('./ocr');
+const { YEAR_ONLY_DOB, MASKED_AADHAAR } = require('./aadhaartext');
 const { preprocessData, computeNameHash } = require('./preprocessing');
 const { storeUser, getUserById } = require('./db');
 const { generateProof, generateNameProof, generateGenderProof } = require('./proofgen');
-const { buildCanonicalPayload, signCredential, CredentialError } = require('./signedcredential');
+const { buildCanonicalPayload, cardNotes, signCredential, CredentialError } = require('./signedcredential');
 const { generateComposedProof, proverInput, serverProvingAvailable } = require('./composedproof');
 
 const app = express();
@@ -39,6 +40,10 @@ const PREPROCESS_DETAIL = 'DOB → YYYYMMDD, Name → hash, Gender → code';
 const DEMO_OCR = {
   valid: { name: 'Rajesh Kumar', dob: '01/01/1990', aadhaarNumber: '1234 5678 9012', gender: 'Male' },
   underage: { name: 'Priya Sharma', dob: '15/06/2015', aadhaarNumber: '1098 7654 3210', gender: 'Female' },
+  // The card prints only a year of birth.
+  year_only: { name: 'Sunita Devi', dob: '1985', aadhaarNumber: '2345 6789 0123', gender: 'Female' },
+  // Masked Aadhaar: only the last 4 digits are printed.
+  masked_id: { name: 'Arjun Mehta', dob: '12/03/1992', aadhaarNumber: 'XXXX XXXX 4321', gender: 'Male' },
 };
 
 // Failure modes for /api/signed-proof. null = OCR itself fails.
@@ -53,6 +58,16 @@ const SIGNED_DEMO_OCR = {
 };
 
 const stage = (name, status, detail) => ({ name, status, detail, timestamp: new Date().toISOString() });
+
+// "Name, DOB, Aadhaar, Gender", naming the year-only and masked variants.
+function extractedFields(ocr) {
+  return [
+    'Name',
+    YEAR_ONLY_DOB.test(ocr.dob) ? 'Year of birth' : 'DOB',
+    MASKED_AADHAAR.test(ocr.aadhaarNumber) ? 'Masked Aadhaar' : 'Aadhaar',
+    ...(ocr.gender ? ['Gender'] : []),
+  ].join(', ');
+}
 
 // Private values are redacted before reaching the client.
 function storedResponse(processed, user, stages) {
@@ -106,7 +121,7 @@ app.post('/api/upload', upload.single('aadhaar'), async (req, res) => {
 
     pushStage('ocr_started', 'running', 'Tesseract OCR processing...');
     const ocr = await extractAadhaarData(req.file.buffer);
-    pushStage('ocr_complete', 'complete', `Extracted: Name, DOB, Aadhaar${ocr.gender ? ', Gender' : ''}`);
+    pushStage('ocr_complete', 'complete', `Extracted: ${extractedFields(ocr)}`);
 
     const processed = preprocessData(ocr.name, ocr.dob, ocr.aadhaarNumber, ocr.gender);
     pushStage('preprocessing_complete', 'complete', PREPROCESS_DETAIL);
@@ -240,7 +255,7 @@ app.post('/api/demo', async (req, res) => {
     });
   }
   if (!Object.hasOwn(DEMO_OCR, scenario)) {
-    return res.status(400).json({ error: 'Invalid scenario. Use: valid, ocr_fail, or underage.' });
+    return res.status(400).json({ error: `Invalid scenario. Use one of: ${[...Object.keys(DEMO_OCR), 'ocr_fail'].join(', ')}.` });
   }
 
   try {
@@ -250,7 +265,7 @@ app.post('/api/demo', async (req, res) => {
     res.json(
       storedResponse(processed, user, [
         stage('upload_received', 'complete', `Demo: ${scenario} Aadhaar`),
-        stage('ocr_complete', 'complete', 'Extracted: Name, DOB, Aadhaar, Gender'),
+        stage('ocr_complete', 'complete', `Extracted: ${extractedFields(ocr)}`),
         stage('preprocessing_complete', 'complete', PREPROCESS_DETAIL),
         stage('supabase_stored', 'complete', `User ID: ${user.id}`),
       ])
@@ -271,7 +286,7 @@ async function issueSignedCredential(req, pushStage) {
     pushStage('upload_received', 'complete', `${req.file.mimetype}, ${req.file.size} bytes`);
     pushStage('ocr_started', 'running', 'Tesseract OCR processing...');
     ocr = await extractAadhaarData(req.file.buffer);
-    pushStage('ocr_complete', 'complete', 'Extracted: Name, DOB, ID, Gender');
+    pushStage('ocr_complete', 'complete', `Extracted: ${extractedFields(ocr)}`);
   } else if (scenario) {
     if (!Object.hasOwn(SIGNED_DEMO_OCR, scenario)) {
       throw new BadRequest(`Unknown scenario. Use one of: ${Object.keys(SIGNED_DEMO_OCR).join(', ')}.`);
@@ -295,7 +310,7 @@ async function issueSignedCredential(req, pushStage) {
     'complete',
     `${signed.canonicalBytes} canonical + ${signed.circuitInputs.padding.pad_byte_count} pad = 119 bytes, RSA-2048`
   );
-  return { payload, ...signed };
+  return { payload, card: cardNotes(payload), ...signed };
 }
 
 function sendSignedError(res, err, stages) {
@@ -331,7 +346,7 @@ app.post('/api/signed-proof', upload.single('image'), async (req, res) => {
   const pushStage = (...args) => stages.push(stage(...args));
 
   try {
-    const { payload, credential, circuitInputs } = await issueSignedCredential(req, pushStage);
+    const { payload, card, credential, circuitInputs } = await issueSignedCredential(req, pushStage);
 
     pushStage('proof_started', 'running', 'RSA verify + in-circuit extraction + age check...');
     const result = await generateComposedProof(circuitInputs, payload.dob);
@@ -340,6 +355,7 @@ app.post('/api/signed-proof', upload.single('image'), async (req, res) => {
     res.json({
       success: true,
       guarantee: 'issuer-signed',
+      card,
       proof: result.proof,
       publicSignals: result.publicSignals,
       isValid: result.isValid,
@@ -363,8 +379,8 @@ app.post('/api/issue-credential', upload.single('image'), async (req, res) => {
   const pushStage = (...args) => stages.push(stage(...args));
 
   try {
-    const { credential, circuitInputs } = await issueSignedCredential(req, pushStage);
-    res.json({ success: true, input: proverInput(circuitInputs), credentialSha256: credential.sha256, stages });
+    const { card, credential, circuitInputs } = await issueSignedCredential(req, pushStage);
+    res.json({ success: true, input: proverInput(circuitInputs), card, credentialSha256: credential.sha256, stages });
   } catch (err) {
     sendSignedError(res, err, stages);
   }

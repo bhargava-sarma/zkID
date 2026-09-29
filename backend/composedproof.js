@@ -32,14 +32,18 @@ async function generateComposedProof(circuitInputs, isoDob) {
   const thresholdDate = computeThresholdDate();
 
   // Checked before proving so an underage subject gets a precise answer and a
-  // later circuit assert can only mean a real fault.
+  // later circuit assert can only mean a real fault. Same encoding as the
+  // circuit, so a year-only YYYY-99-99 sorts after every date in that year.
   const [y, m, d] = isoDob.split('-').map(Number);
   const dobEncoded = y * 10000 + m * 100 + d;
   if (dobEncoded > thresholdDate) {
     throw new CredentialError({
       code: 'AGE_REQUIREMENT_NOT_MET',
       reason: 'underage',
-      userMessage: 'This credential does not meet the minimum age requirement.',
+      userMessage:
+        m === 99
+          ? 'This credential does not meet the minimum age requirement. The card shows only a year of birth, so the check assumes the latest possible birthday in that year.'
+          : 'This credential does not meet the minimum age requirement.',
       detail: `dobEncoded ${dobEncoded} > thresholdDate ${thresholdDate}`,
       retryable: false,
       status: 422,

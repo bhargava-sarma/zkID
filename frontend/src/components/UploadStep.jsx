@@ -191,8 +191,9 @@ function UploadStep({ onComplete }) {
     <div className="card">
       <h2 className="card-title">Upload Aadhaar Card</h2>
       <p className="card-description">
-        Upload an image of an Aadhaar card. The image is processed in memory only
-        and never saved to disk.
+        Upload an image of an Aadhaar card: full, masked, or one that shows only a year of
+        birth. English and Hindi text are read. The image is processed in memory only and
+        never saved to disk.
       </p>
 
       <div
@@ -256,6 +257,22 @@ function UploadStep({ onComplete }) {
             <div className="demo-card-icon">✕</div>
             <div className="demo-card-label">Underage</div>
             <div className="demo-card-desc">Born 2015. Proof generation will fail.</div>
+          </div>
+          <div
+            className="demo-card demo-valid"
+            onClick={() => handleDemo('year_only')}
+          >
+            <div className="demo-card-icon">≈</div>
+            <div className="demo-card-label">Year of Birth Only</div>
+            <div className="demo-card-desc">Card shows only 1985. Age check assumes the latest birthday.</div>
+          </div>
+          <div
+            className="demo-card demo-valid"
+            onClick={() => handleDemo('masked_id')}
+          >
+            <div className="demo-card-icon">✱</div>
+            <div className="demo-card-label">Masked Aadhaar</div>
+            <div className="demo-card-desc">Only the last 4 digits printed. No Aadhaar hash stored.</div>
           </div>
         </div>
       </div>

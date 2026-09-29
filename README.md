@@ -16,6 +16,8 @@ Verify a customer once and let any institution check the result without seeing t
 - **Verifiable by anyone.** Every proof type has a Groth16 verifier on Ethereum Sepolia, with source verified on Etherscan and Sourcify. Checking a proof is a free, read-only call that needs no wallet and no gas.
 - **Privacy by design.** Images are processed in memory and never written to disk. Only hashes and encoded values are stored, and raw ID numbers are never logged or persisted.
 - **Strict validation.** Garbled or impossible dates (like 31 Feb) and missing fields are rejected before signing. Machine-readable error codes separate *retake the photo* from *not eligible*.
+- **Real Aadhaar card variants.** Reads bilingual cards (English and Hindi by default), masked Aadhaar and cards that print only a year of birth. A VID or an issue date is never mistaken for the Aadhaar number or the date of birth.
+- **Proof QR codes.** A signed proof can be shown as a QR code. Any phone camera opens the verifier page, which checks the proof in the browser against a trusted-issuer list and today's 18-year cutoff.
 
 ## How it works
 
@@ -42,6 +44,28 @@ flowchart LR
 | **Gender** | Gender matches a claimed value | Gender | Off-chain + on-chain |
 
 The credential circuit combines SHA-256, RSA-2048 (`RSAVerifier65537(121, 17)`), a uniqueness scan for the `"dob":"` field, digit range checks and a date comparison. That comes to **256,574 constraints** in total.
+
+## Aadhaar card variants
+
+| Card | Read as | Signed credential | Legacy path |
+|---|---|---|---|
+| Year of birth only | `1985` | `"dob":"1985-99-99"` | `dob_encoded = 19859999` |
+| Masked Aadhaar | `XXXX XXXX 4321` | `"id_number":"XXXXXXXX4321"` | no `aadhaar_hash` stored |
+| Bilingual | English text, Hindi labels as a fallback | unchanged | unchanged |
+
+`YYYY-99-99` sorts after every real date in that year, so the age check assumes the latest possible birthday and can never overstate age: someone with only a year of birth passes from 1 January of the year after they could have turned 18. Both forms go through the published circuit and the deployed `CredentialAgeVerifier` unchanged.
+
+OCR reads English and Hindi by default. Hindi lines otherwise come out as Latin noise that can pass for a name. Set `OCR_LANGS` (for example `eng+hin+tam`) to read other scripts; each language adds OCR time, and `eng+hin` takes about twice as long as `eng` alone.
+
+## Proof QR codes
+
+After a signed-credential proof, **Show as QR code** packs it into 270 bytes: format version, proof type, an 8-byte issuer key ID, the cutoff date and the Groth16 proof. The QR code opens `/#/verify?p=…`, and a URL fragment never reaches a server. The verifier page (also under **Verify a proof**) scans with the camera or reads an uploaded image, and accepts only if:
+
+1. the issuer key ID is in [`frontend/src/verify/trustedIssuers.js`](frontend/src/verify/trustedIssuers.js), the relying party's list,
+2. the proof verifies under that issuer's key, and
+3. the cutoff date is no later than today's 18-year cutoff. An earlier cutoff is only stricter.
+
+A copy or screenshot of the code verifies the same way: it isn't bound to a session or to the person showing it. Only signed-credential proofs get a QR code, because the legacy age, name and gender proofs aren't tied to a signed credential, so a third party can't rely on them.
 
 ## Quick start
 
@@ -122,7 +146,16 @@ node gen_input.js --tamper=date && $W input_tampered_date.json w.wtns      # rej
 node gen_input.js --threshold 19000101 --out f.json && $W f.json w.wtns    # rejected: age
 ```
 
-Signed payload: four ASCII fields, sorted keys, no whitespace, space-padded to 119 bytes (two SHA-256 blocks), RSASSA-PKCS1-v1_5 / SHA-256.
+Signed payload: four ASCII fields, sorted keys, no whitespace, space-padded to 119 bytes (two SHA-256 blocks), RSASSA-PKCS1-v1_5 / SHA-256. `dob` is `YYYY-MM-DD`, or `YYYY-99-99` for a year of birth; `id_number` is 12 digits, or `XXXXXXXX` and the last 4 digits for a masked Aadhaar.
+</details>
+
+<details>
+<summary><b>Tests</b></summary>
+
+```bash
+cd backend  && npm test   # OCR parsing, card variants, signing; circuit checks need npm run fetch-circuit
+cd frontend && npm test   # proof QR code format and verifier policy
+```
 </details>
 
 ## API
@@ -132,12 +165,12 @@ Signed payload: four ASCII fields, sorted keys, no whitespace, space-padded to 1
 | `POST /api/signed-proof` | Image or `{scenario}` → issuer-signed credential age proof, proved on the server |
 | `POST /api/issue-credential` | Image or `{scenario}` → signed credential as circuit input, for proving in the browser |
 | `POST /api/upload` | Image → OCR → privacy-preserving storage |
-| `POST /api/demo` | Canned upload: `valid`, `underage`, `ocr_fail` |
+| `POST /api/demo` | Canned upload: `valid`, `underage`, `year_only`, `masked_id`, `ocr_fail` |
 | `POST /api/generate-proof` | `{userId}` → age proof |
 | `POST /api/generate-name-proof` | `{userId, claimedName}` → name proof |
 | `POST /api/generate-gender-proof` | `{userId, claimedGender}` → gender proof |
 
-Error codes: `CREDENTIAL_UNPROCESSABLE` (retryable), `AGE_REQUIREMENT_NOT_MET`, `PROVING_UNAVAILABLE`.
+Error codes: `CREDENTIAL_UNPROCESSABLE` (retryable), `AGE_REQUIREMENT_NOT_MET`, `PROVING_UNAVAILABLE`. Both signed endpoints also return `card: { yearOfBirthOnly, maskedId }`.
 
 ## Deploy to Vercel
 
@@ -177,8 +210,9 @@ backend/                          Express API: OCR, preprocessing, signing, proo
   hardhat-deploy/                 Solidity verifiers and deploy scripts
 frontend/                         React UI: upload → preprocess → store → prove → verify on-chain
   src/prover/                     In-browser credential prover (Web Worker)
+  src/verify/                     Proof QR code format, trusted issuers, verifier checks
   scripts/prepare-circuit.mjs     Stages circuit files in public/circuit/ before dev and build
 mock-issuer/                      RSA-2048 issuer: keygen, signing, independent verifier
 ```
 
-**Stack:** circom 2 · snarkjs (Groth16, BN128) · Node.js / Express · Tesseract.js · Supabase · React / Vite · ethers.js · Hardhat · Ethereum Sepolia
+**Stack:** circom 2 · snarkjs (Groth16, BN128) · Node.js / Express · Tesseract.js · Supabase · React / Vite · ethers.js · node-qrcode · jsQR · Hardhat · Ethereum Sepolia

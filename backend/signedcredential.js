@@ -77,20 +77,29 @@ function buildCanonicalPayload(ocr) {
   if (typeof dob !== 'string') {
     throw unprocessable('dob_missing', 'OCR produced no date of birth.');
   }
-  const m = dob.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (!m) {
-    throw unprocessable('dob_format', `DOB "${dob}" is not DD/MM/YYYY.`);
+  // DD/MM/YYYY, or YYYY for a card that prints only a year of birth. The
+  // year-only form is signed as YYYY-99-99 (see validatePayload).
+  const full = dob.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  const yearOnly = dob.trim().match(/^(\d{4})$/);
+  let isoDob;
+  if (full) {
+    const [, dd, mm, yyyy] = full;
+    isoDob = `${yyyy}-${mm}-${dd}`;
+  } else if (yearOnly) {
+    isoDob = `${yearOnly[1]}-99-99`;
+  } else {
+    throw unprocessable('dob_format', `DOB "${dob}" is not DD/MM/YYYY or YYYY.`);
   }
-  const [, dd, mm, yyyy] = m;
 
   if (typeof aadhaarNumber !== 'string') {
     throw unprocessable('id_number_missing', 'OCR produced no ID number.');
   }
-  const idDigits = aadhaarNumber.replace(/\s/g, '');
-  if (!/^\d{12}$/.test(idDigits)) {
+  // 12 digits, or XXXXXXXX + the last 4 digits for a masked Aadhaar.
+  const idDigits = aadhaarNumber.replace(/\s/g, '').toUpperCase();
+  if (!/^(\d{12}|X{8}\d{4})$/.test(idDigits)) {
     throw unprocessable(
       'id_number_format',
-      `ID number did not reduce to 12 digits (got ${idDigits.length} chars, ${maskId(idDigits)}).`
+      `ID number is neither 12 digits nor a masked number (got ${idDigits.length} chars, ${maskId(idDigits)}).`
     );
   }
 
@@ -102,7 +111,12 @@ function buildCanonicalPayload(ocr) {
     throw unprocessable('gender_invalid', `Unrecognized gender "${gender}".`);
   }
 
-  return { name: cleanName, dob: `${yyyy}-${mm}-${dd}`, id_number: idDigits, gender: genderCode };
+  return { name: cleanName, dob: isoDob, id_number: idDigits, gender: genderCode };
+}
+
+// What the UI should say about a credential built from a card variant.
+function cardNotes(payload) {
+  return { yearOfBirthOnly: payload.dob.endsWith('-99-99'), maskedId: payload.id_number.startsWith('X') };
 }
 
 function guardReason(message) {
@@ -159,4 +173,4 @@ function signCredential(payload) {
   };
 }
 
-module.exports = { buildCanonicalPayload, signCredential, CredentialError, unavailable };
+module.exports = { buildCanonicalPayload, cardNotes, signCredential, CredentialError, unavailable };
