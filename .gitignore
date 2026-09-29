@@ -28,3 +28,12 @@ backend/circuits/credential-age-proof/*
 !backend/circuits/credential-age-proof/fetch_artifacts.js
 !backend/circuits/credential-age-proof/package.json
 !backend/circuits/credential-age-proof/package-lock.json
+
+# Name and gender match circuit: same arrangement.
+backend/circuits/credential-match-proof/*
+!backend/circuits/credential-match-proof/circuits/
+!backend/circuits/credential-match-proof/gen_input.js
+!backend/circuits/credential-match-proof/artifacts.json
+!backend/circuits/credential-match-proof/fetch_artifacts.js
+!backend/circuits/credential-match-proof/package.json
+!backend/circuits/credential-match-proof/package-lock.json

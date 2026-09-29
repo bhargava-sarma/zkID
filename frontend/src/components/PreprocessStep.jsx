@@ -7,9 +7,9 @@ function PreprocessStep({ data, onNext }) {
     <div className="card">
       <h2 className="card-title">Data Preprocessing</h2>
       <p className="card-description">
-        Raw document data is transformed into circuit-compatible inputs.
-        Each step below shows the transformation applied to prepare data
-        for the zero-knowledge proof system.
+        Raw document data is reduced to hashes and encoded values before the
+        KYC record is stored. Proofs don't use these values: they are made from
+        the issuer-signed credential.
       </p>
 
       <div className="pipeline-complete-badge">

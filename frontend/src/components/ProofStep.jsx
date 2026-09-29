@@ -1,21 +1,33 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { verifyOnChain } from '../contracts/onChainVerify';
-import { hasVerifier, CHAIN } from '../contracts/contractConfig';
+import { checkOnChain } from '../contracts/onChainVerify';
+import { hasPolicy, CHAIN } from '../contracts/contractConfig';
 import { proveInBrowser } from '../prover/proveInBrowser';
+import { buildMatchInput, normalizeName, signedFields, NAME_MAX } from '../prover/matchInput';
+import { cutoffDate, formatDate, issuerOf } from '../verify/policy.js';
 import ProofQR from './ProofQR';
 
-const PROOF_STAGES = [
-  'Preparing circuit inputs...',
-  'Computing witness...',
-  'Generating Groth16 proof...',
-  'Verifying proof...',
+// Every proof is made from the issuer-signed credential. Age uses
+// CredentialAgeProof; name and gender use CredentialMatchProof.
+const TABS = [
+  { key: 'age', label: 'Age 18+' },
+  { key: 'name', label: 'Name' },
+  { key: 'gender', label: 'Gender' },
 ];
+const CIRCUIT = { age: 'age', name: 'match', gender: 'match' };
+const CONSTRAINTS = { age: '256,574', match: '260,903' };
+const CHECKED = { age: 'the age check', name: 'the name match', gender: 'the gender match' };
 
-const SIGNED_STAGES = [
+const DESCRIPTIONS = {
+  age: 'One circuit proves the issuer signed this credential and the date of birth inside it is 18 or older. Nothing else is revealed.',
+  name: 'One circuit proves the issuer signed this credential and the name inside it matches the name you claim, ignoring case and spacing. Nothing else is revealed.',
+  gender: 'One circuit proves the issuer signed this credential and the gender inside it matches the gender you claim. Nothing else is revealed.',
+};
+
+const serverStages = (kind) => [
   'Reading the document...',
   'Signing the credential (RSA-2048)...',
-  'Proving signature + age in one circuit...',
+  `Proving signature + ${CHECKED[kind]} in one circuit...`,
 ];
 
 const BROWSER_STAGES = [
@@ -31,16 +43,9 @@ const PROVE_WHERE = [
   { key: 'browser', label: 'Your browser' },
 ];
 
-const TABS = [
-  { key: 'signed', label: 'Signed Credential' },
-  { key: 'age', label: 'Age Proof' },
-  { key: 'name', label: 'Name Proof' },
-  { key: 'gender', label: 'Gender Proof' },
-];
-
 const UPLOADED = 'uploaded';
 
-const SIGNED_SCENARIOS = [
+const SCENARIOS = [
   { key: 'valid', label: 'Valid adult' },
   { key: 'underage', label: 'Underage' },
   { key: 'year_only', label: 'Year of birth only' },
@@ -53,9 +58,17 @@ const SIGNED_SCENARIOS = [
   { key: 'long_name', label: 'Name too long' },
 ];
 
+const GENDER_OPTIONS = [
+  { code: 'M', label: 'Male' },
+  { code: 'F', label: 'Female' },
+  { code: 'O', label: 'Other' },
+];
+const GENDER_LABELS = { M: 'Male', F: 'Female', O: 'Other' };
+
 const FAILURE_TITLES = {
   CREDENTIAL_UNPROCESSABLE: 'Retake the photo',
   AGE_REQUIREMENT_NOT_MET: 'Not eligible',
+  CLAIM_MISMATCH: "Claim doesn't match",
   PROVING_UNAVAILABLE: 'Verification unavailable',
 };
 
@@ -70,16 +83,29 @@ const STAGE_LABELS = {
   error: 'Stopped',
 };
 
+const HIDDEN_FIELDS = {
+  age: ['Date of Birth', 'Name', 'Gender', 'Aadhaar Number'],
+  name: ['Date of Birth', 'Gender', 'Aadhaar Number'],
+  gender: ['Name', 'Date of Birth', 'Aadhaar Number'],
+};
+
+const PRIVACY_NOTES = {
+  age: 'Name, date of birth, Aadhaar number and gender were never exposed.',
+  name: 'Only the claimed name was checked. Date of birth, gender and Aadhaar number were never exposed.',
+  gender: 'Only the claimed gender was checked. Name, date of birth and Aadhaar number were never exposed.',
+};
+
+const ONCHAIN_RESULTS = {
+  Accepted: 'Accepted by ZkIdPolicy',
+  UntrustedIssuer: "Rejected: the issuer isn't on the policy's trusted list",
+  CutoffTooLate: "Rejected: the cutoff date is later than today's 18-year cutoff",
+  NothingClaimed: 'Rejected: the proof claims nothing',
+  InvalidProof: "Rejected: the proof doesn't verify",
+};
+
 const UNDERAGE = 'This credential does not meet the minimum age requirement.';
 const YEAR_ONLY_NOTE =
   'The card shows only a year of birth, so the check assumes the latest possible birthday in that year.';
-
-const HIDDEN_FIELDS = {
-  signed: ['Date of Birth', 'Name', 'Gender'],
-  age: ['Date of Birth'],
-  name: ['Actual Name'],
-  gender: ['Actual Gender Code'],
-};
 
 // Server-side pipeline stages. A "running" stage is shown only where the pipeline stopped.
 function StageTrace({ stages }) {
@@ -99,36 +125,43 @@ function StageTrace({ stages }) {
   );
 }
 
-const GENDER_OPTIONS = [
-  { code: 1, label: 'Male' },
-  { code: 2, label: 'Female' },
-  { code: 3, label: 'Other' },
-];
+// A failure decided in the browser, shaped like the server's.
+function browserFailure(code, reason, error, stages) {
+  const failure = {
+    error,
+    code,
+    reason,
+    retryable: false,
+    stages: [...stages, { name: 'error', status: 'failed', detail: 'Checked in your browser' }],
+  };
+  return Object.assign(new Error(error), { failure });
+}
 
-function ProofStep({ userId, userName, source, onStartOver }) {
-  const [activeTab, setActiveTab] = useState('signed');
+function ProofStep({ userName, source, onStartOver }) {
+  const [activeTab, setActiveTab] = useState('age');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [results, setResults] = useState({ signed: null, age: null, name: null, gender: null });
+  const [results, setResults] = useState({ age: null, name: null, gender: null });
+  const [failures, setFailures] = useState({ age: null, name: null, gender: null });
+  const [policy, setPolicy] = useState({});
   const [currentStage, setCurrentStage] = useState(0);
 
   const [signedSource, setSignedSource] = useState(source?.file ? UPLOADED : source?.scenario || 'valid');
-  const [signedFailure, setSignedFailure] = useState(null);
   const [proveWhere, setProveWhere] = useState('server');
   const [serverProving, setServerProving] = useState(true);
   const [browserStatus, setBrowserStatus] = useState('');
 
   const [claimedName, setClaimedName] = useState(userName || '');
-
-  const [claimedGender, setClaimedGender] = useState(1);
+  const [claimedGender, setClaimedGender] = useState('M');
 
   const [proofOpen, setProofOpen] = useState(false);
   const [signalsOpen, setSignalsOpen] = useState(false);
 
-  const [onChainResults, setOnChainResults] = useState({});
+  const [onChain, setOnChain] = useState({});
   const [onChainLoading, setOnChainLoading] = useState({});
 
-  // Hosts without the proving key (e.g. Vercel) only support browser proving.
+  const setFor = (setter, kind, value) => setter((prev) => ({ ...prev, [kind]: value }));
+
+  // Hosts without the proving keys (e.g. Vercel) only support browser proving.
   useEffect(() => {
     axios
       .get('/api/health')
@@ -141,8 +174,8 @@ function ProofStep({ userId, userName, source, onStartOver }) {
       .catch(() => {});
   }, []);
 
-  const inBrowser = activeTab === 'signed' && proveWhere === 'browser';
-  const loadingStages = inBrowser ? BROWSER_STAGES : activeTab === 'signed' ? SIGNED_STAGES : PROOF_STAGES;
+  const inBrowser = proveWhere === 'browser';
+  const loadingStages = inBrowser ? BROWSER_STAGES : serverStages(activeTab);
 
   // Server proofs animate on a timer; browser proofs report real progress.
   useEffect(() => {
@@ -158,58 +191,57 @@ function ProofStep({ userId, userName, source, onStartOver }) {
   useEffect(() => {
     setProofOpen(false);
     setSignalsOpen(false);
-    setError(null);
-    setSignedFailure(null);
   }, [activeTab]);
 
-  const triggerOnChainVerification = async (proofData, proofType) => {
-    if (!hasVerifier(proofType)) return;
-    if (!proofData.isValid || !proofData.proof || !proofData.publicSignals) return;
+  const claimsFor = (kind) =>
+    kind === 'name' ? { name: claimedName.trim() } : kind === 'gender' ? { gender: claimedGender } : {};
 
-    setOnChainLoading((prev) => ({ ...prev, [proofType]: true }));
-    try {
-      const result = await verifyOnChain(proofData.proof, proofData.publicSignals, proofType);
-      setOnChainResults((prev) => ({ ...prev, [proofType]: result }));
-    } catch (err) {
-      setOnChainResults((prev) => ({
-        ...prev,
-        [proofType]: { onChainValid: false, contractAddress: null, error: err.message },
-      }));
-    } finally {
-      setOnChainLoading((prev) => ({ ...prev, [proofType]: false }));
-    }
-  };
-
-  const postCredentialSource = (url) => {
+  const postCredentialSource = (url, fields = {}) => {
     if (signedSource === UPLOADED) {
       const formData = new FormData();
       formData.append('image', source.file);
+      for (const [key, value] of Object.entries(fields)) formData.append(key, value);
       return axios.post(url, formData);
     }
-    return axios.post(url, { scenario: signedSource });
+    return axios.post(url, { scenario: signedSource, ...fields });
+  };
+
+  const proveOnServer = async (kind) => {
+    if (kind === 'age') return (await postCredentialSource('/api/signed-proof')).data;
+    const claims = claimsFor(kind);
+    const fields = kind === 'name' ? { claimedName: claims.name } : { claimedGender: claims.gender };
+    return (await postCredentialSource('/api/signed-match-proof', fields)).data;
   };
 
   // The server only issues the credential; proving happens on this device.
-  const proveSignedInBrowser = async () => {
+  // Claims are checked first, so a wrong one gets a clear answer instead of a failed proof.
+  const proveOnDevice = async (kind) => {
     const { data } = await postCredentialSource('/api/issue-credential');
     const { input, stages, card } = data;
+    const claims = claimsFor(kind);
 
-    // Age rule checked first, so an underage holder gets a clear answer instead of a failed proof.
-    // A year-only YYYY-99-99 compares after every date in that year, as in the circuit.
-    const at = input.dobIndex + 7;
-    const dob = String.fromCharCode(...input.msg.slice(at, at + 10));
-    if (Number(dob.replaceAll('-', '')) > input.thresholdDate) {
-      const failure = {
-        error: card?.yearOfBirthOnly ? `${UNDERAGE} ${YEAR_ONLY_NOTE}` : UNDERAGE,
-        code: 'AGE_REQUIREMENT_NOT_MET',
-        reason: 'underage',
-        retryable: false,
-        stages: [...stages, { name: 'error', status: 'failed', detail: 'Checked in your browser' }],
-      };
-      throw Object.assign(new Error(failure.error), { failure });
+    let circuitInput = input;
+    if (kind === 'age') {
+      // A year-only YYYY-99-99 compares after every date in that year, as in the circuit.
+      const at = input.dobIndex + 7;
+      const dob = String.fromCharCode(...input.msg.slice(at, at + 10));
+      if (Number(dob.replaceAll('-', '')) > input.thresholdDate) {
+        const error = card?.yearOfBirthOnly ? `${UNDERAGE} ${YEAR_ONLY_NOTE}` : UNDERAGE;
+        throw browserFailure('AGE_REQUIREMENT_NOT_MET', 'underage', error, stages);
+      }
+    } else {
+      const signed = signedFields(input.msg);
+      if (kind === 'name' && normalizeName(claims.name) !== signed.name.toLowerCase()) {
+        throw browserFailure('CLAIM_MISMATCH', 'name_mismatch', "The name on this credential doesn't match the claimed name.", stages);
+      }
+      if (kind === 'gender' && claims.gender !== signed.gender) {
+        throw browserFailure('CLAIM_MISMATCH', 'gender_mismatch', "The gender on this credential doesn't match the claimed gender.", stages);
+      }
+      circuitInput = buildMatchInput(input, claims);
     }
 
-    const result = await proveInBrowser(input, {
+    const result = await proveInBrowser(circuitInput, {
+      circuit: CIRCUIT[kind],
       onStage: (stage) => {
         setCurrentStage(BROWSER_STAGE_INDEX[stage]);
         if (stage !== 'loading') setBrowserStatus('');
@@ -219,90 +251,69 @@ function ProofStep({ userId, userName, source, onStartOver }) {
     return {
       ...result,
       card,
-      message: 'AGE_OVER_18: VERIFIED (proved in your browser)',
-      thresholdDate: input.thresholdDate,
+      message: `${kind === 'age' ? 'AGE_OVER_18' : `${kind.toUpperCase()}_MATCH`}: VERIFIED (proved in your browser)`,
+      claimedName: claims.name ?? null,
+      claimedGender: claims.gender ?? null,
+      claimedGenderLabel: claims.gender ? GENDER_LABELS[claims.gender] : null,
       stages: [...stages, { name: 'proof_complete', status: 'complete', detail: `Proved in your browser in ${result.proofDuration}ms` }],
     };
   };
 
-  const handleGenerateSigned = async () => {
-    setLoading(true);
-    setSignedFailure(null);
-    setBrowserStatus('');
-    setOnChainResults((prev) => ({ ...prev, signed: null }));
+  // The checks ZkIdPolicy makes, applied here so the result shows what a relying party would accept.
+  const applyPolicy = async (kind, result) => {
+    const issuer = await issuerOf(result.publicSignals);
+    if (kind !== 'age') return setFor(setPolicy, kind, { issuer });
+    const threshold = Number(result.publicSignals[17]);
+    const cutoff = cutoffDate();
+    setFor(setPolicy, kind, { issuer, ageOk: threshold <= cutoff, bornOnOrBefore: formatDate(threshold), cutoff: formatDate(cutoff) });
+  };
+
+  const runOnChain = async (kind, result) => {
+    if (!hasPolicy() || !result.isValid) return;
+    setFor(setOnChainLoading, kind, true);
     try {
-      const result =
-        proveWhere === 'browser' ? await proveSignedInBrowser() : (await postCredentialSource('/api/signed-proof')).data;
-      setResults((prev) => ({ ...prev, signed: result }));
-      triggerOnChainVerification(result, 'signed');
+      setFor(setOnChain, kind, await checkOnChain(result.proof, result.publicSignals, kind));
+    } finally {
+      setFor(setOnChainLoading, kind, false);
+    }
+  };
+
+  const generate = async () => {
+    const kind = activeTab;
+    setLoading(true);
+    setBrowserStatus('');
+    setFor(setFailures, kind, null);
+    setFor(setOnChain, kind, null);
+    setFor(setPolicy, kind, null);
+    try {
+      const result = inBrowser ? await proveOnDevice(kind) : await proveOnServer(kind);
+      setFor(setResults, kind, result);
+      applyPolicy(kind, result);
+      runOnChain(kind, result);
     } catch (err) {
-      setSignedFailure(err.failure || err.response?.data || { error: err.message || 'Server unreachable.' });
+      setFor(setFailures, kind, err.failure || err.response?.data || { error: err.message || 'Server unreachable.' });
     } finally {
       setLoading(false);
       setBrowserStatus('');
     }
   };
 
-  const handleGenerateAge = async () => {
-    setLoading(true);
-    setError(null);
-    setOnChainResults((prev) => ({ ...prev, age: null }));
-    try {
-      const res = await axios.post('/api/generate-proof', { userId });
-      setResults((prev) => ({ ...prev, age: res.data }));
-      triggerOnChainVerification(res.data, 'age');
-    } catch (err) {
-      setError(err.response?.data?.error || 'Server unreachable.');
-    } finally {
-      setLoading(false);
-    }
+  const startAgain = (kind) => {
+    setFor(setResults, kind, null);
+    setFor(setOnChain, kind, null);
+    setFor(setPolicy, kind, null);
   };
 
-  const handleGenerateName = async () => {
-    if (!claimedName.trim()) {
-      setError('Please enter a name to verify against.');
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    setOnChainResults((prev) => ({ ...prev, name: null }));
-    try {
-      const res = await axios.post('/api/generate-name-proof', { userId, claimedName: claimedName.trim() });
-      setResults((prev) => ({ ...prev, name: res.data }));
-      triggerOnChainVerification(res.data, 'name');
-    } catch (err) {
-      setError(err.response?.data?.error || 'Server unreachable.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGenerateGender = async () => {
-    setLoading(true);
-    setError(null);
-    setOnChainResults((prev) => ({ ...prev, gender: null }));
-    try {
-      const res = await axios.post('/api/generate-gender-proof', { userId, claimedGender });
-      setResults((prev) => ({ ...prev, gender: res.data }));
-      triggerOnChainVerification(res.data, 'gender');
-    } catch (err) {
-      setError(err.response?.data?.error || 'Server unreachable.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const tabLabel = TABS.find((t) => t.key === activeTab)?.label || 'Proof';
 
   if (loading) {
-    const tabLabel = TABS.find((t) => t.key === activeTab)?.label || 'Proof';
     return (
       <div className="card">
-        <h2 className="card-title">Generating {tabLabel}</h2>
+        <h2 className="card-title">Generating {tabLabel} Proof</h2>
         <p className="card-description">
           {inBrowser
             ? 'Your device is generating the proof. The server never sees the private inputs.'
-            : activeTab === 'signed'
-            ? 'Verifying the issuer signature and the age check in one 256,574-constraint circuit. This takes about 4 seconds.'
-            : 'Running the Groth16 zk-SNARK circuit. This may take a few seconds.'}
+            : `Verifying the issuer signature and ${CHECKED[activeTab]} in one ${CONSTRAINTS[CIRCUIT[activeTab]]}-constraint circuit. This takes about 4 seconds.`}
         </p>
         <div className="loading-container">
           <div className="spinner" />
@@ -330,15 +341,18 @@ function ProofStep({ userId, userName, source, onStartOver }) {
   }
 
   const currentResult = results[activeTab];
-  const currentOnChain = onChainResults[activeTab] || null;
+  const currentFailure = failures[activeTab];
+  const currentPolicy = policy[activeTab] || null;
+  const currentOnChain = onChain[activeTab] || null;
   const currentOnChainLoading = onChainLoading[activeTab] || false;
+  const nameMissing = activeTab === 'name' && !claimedName.trim();
 
   return (
     <div className="card">
       <h2 className="card-title">Zero-Knowledge Proofs</h2>
       <p className="card-description">
-        Generate cryptographic proofs for different attributes without revealing private data.
-        Each proof uses a separate Groth16 zk-SNARK circuit.
+        Every proof is made from the issuer-signed credential, so it can only attest to what the issuer signed.
+        A relying party also checks that the issuer is one it trusts.
       </p>
 
       <div className="proof-tabs">
@@ -354,15 +368,44 @@ function ProofStep({ userId, userName, source, onStartOver }) {
       </div>
 
       <div className="proof-tab-content" key={activeTab}>
-        {activeTab === 'signed' && !currentResult && (
+        {!currentResult && (
           <>
-            <p className="card-description">
-              The issuer signs the credential, then a single circuit proves the signature is valid and the
-              date of birth inside it is 18+. The proof can only attest to what the issuer signed.
-            </p>
+            <p className="card-description">{DESCRIPTIONS[activeTab]}</p>
+
+            {activeTab === 'name' && (
+              <div className="name-input-group">
+                <label className="name-input-label">Name to prove</label>
+                <input
+                  type="text"
+                  className="name-input"
+                  value={claimedName}
+                  maxLength={NAME_MAX}
+                  onChange={(e) => setClaimedName(e.target.value)}
+                  placeholder="Enter the name on the card..."
+                />
+              </div>
+            )}
+
+            {activeTab === 'gender' && (
+              <>
+                <label className="name-input-label">Gender to prove</label>
+                <div className="option-group">
+                  {GENDER_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.code}
+                      className={`option-button ${claimedGender === opt.code ? 'selected' : ''}`}
+                      onClick={() => setClaimedGender(opt.code)}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
             <label className="name-input-label">Credential source</label>
             <div className="option-grid">
-              {[...(source?.file ? [{ key: UPLOADED, label: 'Uploaded image' }] : []), ...SIGNED_SCENARIOS].map((opt) => (
+              {[...(source?.file ? [{ key: UPLOADED, label: 'Uploaded image' }] : []), ...SCENARIOS].map((opt) => (
                 <button
                   key={opt.key}
                   className={`option-button ${signedSource === opt.key ? 'selected' : ''}`}
@@ -388,105 +431,33 @@ function ProofStep({ userId, userName, source, onStartOver }) {
                 </div>
               </>
             )}
-            {proveWhere === 'browser' && (
+            {inBrowser && (
               <p className="card-description">
                 The server only issues and signs the credential. Your browser generates the proof, so no server
-                sees the private inputs. The 135 MB proving key downloads once and is cached.
+                sees the private inputs. Each circuit's 135 MB proving key downloads once and is cached.
               </p>
             )}
             <div className="step-actions">
-              <button className="btn btn-primary btn-full" onClick={handleGenerateSigned}>
-                Generate Signed Credential Proof
+              <button className="btn btn-primary btn-full" onClick={generate} disabled={nameMissing}>
+                Generate {tabLabel} Proof
               </button>
             </div>
-            {signedFailure && (
+            {currentFailure && (
               <>
                 <div className="proof-failed">
-                  <div className="proof-failed-icon">{signedFailure.retryable ? '↻' : '✕'}</div>
-                  <div className="proof-failed-title">{FAILURE_TITLES[signedFailure.code] || 'Proof Failed'}</div>
-                  <div className="proof-failed-message">{signedFailure.error}</div>
-                  {signedFailure.code && (
+                  <div className="proof-failed-icon">{currentFailure.retryable ? '↻' : '✕'}</div>
+                  <div className="proof-failed-title">{FAILURE_TITLES[currentFailure.code] || 'Proof Failed'}</div>
+                  <div className="proof-failed-message">{currentFailure.error}</div>
+                  {currentFailure.code && (
                     <div className="proof-failed-code">
-                      {signedFailure.code} · {signedFailure.reason} · {signedFailure.retryable ? 'retryable' : 'not retryable'}
+                      {currentFailure.code} · {currentFailure.reason} · {currentFailure.retryable ? 'retryable' : 'not retryable'}
                     </div>
                   )}
                 </div>
-                {signedFailure.stages && <StageTrace stages={signedFailure.stages} />}
+                {currentFailure.stages && <StageTrace stages={currentFailure.stages} />}
               </>
             )}
           </>
-        )}
-
-        {activeTab === 'age' && !currentResult && (
-          <>
-            <p className="card-description">
-              Prove that the user is ≥18 years old without revealing their date of birth.
-            </p>
-            {error && <div className="error-message">{error}</div>}
-            <div className="step-actions">
-              <button className="btn btn-primary btn-full" onClick={handleGenerateAge}>
-                Generate Age Proof
-              </button>
-            </div>
-          </>
-        )}
-
-        {activeTab === 'name' && !currentResult && (
-          <>
-            <p className="card-description">
-              Prove that the user's name matches a claimed identity without revealing the raw name in the proof.
-              The circuit compares SHA-256 hashes.
-            </p>
-            <div className="name-input-group">
-              <label className="name-input-label">Name to verify against</label>
-              <input
-                type="text"
-                className="name-input"
-                value={claimedName}
-                onChange={(e) => setClaimedName(e.target.value)}
-                placeholder="Enter the name to check..."
-              />
-            </div>
-            {error && <div className="error-message">{error}</div>}
-            <div className="step-actions">
-              <button className="btn btn-primary btn-full" onClick={handleGenerateName} disabled={!claimedName.trim()}>
-                Generate Name Proof
-              </button>
-            </div>
-          </>
-        )}
-
-        {activeTab === 'gender' && !currentResult && (
-          <>
-            <p className="card-description">
-              Prove that the user's gender matches a claimed value without exposing it in the proof.
-            </p>
-            <div className="option-group">
-              {GENDER_OPTIONS.map((opt) => (
-                <button
-                  key={opt.code}
-                  className={`option-button ${claimedGender === opt.code ? 'selected' : ''}`}
-                  onClick={() => setClaimedGender(opt.code)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            {error && <div className="error-message">{error}</div>}
-            <div className="step-actions">
-              <button className="btn btn-primary btn-full" onClick={handleGenerateGender}>
-                Generate Gender Proof
-              </button>
-            </div>
-          </>
-        )}
-
-        {error && !currentResult && activeTab === 'age' && (
-          <div className="proof-failed">
-            <div className="proof-failed-icon">✕</div>
-            <div className="proof-failed-title">Proof Failed</div>
-            <div className="proof-failed-message">{error}</div>
-          </div>
         )}
 
         {currentResult && (
@@ -513,26 +484,16 @@ function ProofStep({ userId, userName, source, onStartOver }) {
             <div className="privacy-note">
               <span className="privacy-note-icon">🔒</span>
               <div className="privacy-note-text">
-                {activeTab === 'signed' && (
-                  <><strong>Name, date of birth, Aadhaar number and gender were never exposed.</strong> The proof shows the issuer signed this credential and its holder is ≥18.</>
-                )}
-                {activeTab === 'age' && (
-                  <><strong>Date of birth was never exposed.</strong> Only the fact that the user is ≥18 was proven.</>
-                )}
-                {activeTab === 'name' && (
-                  <><strong>Raw name was never exposed.</strong> Only the hash match was proven — the verifier cannot learn the actual name from the proof.</>
-                )}
-                {activeTab === 'gender' && (
-                  <><strong>Gender was never exposed in the proof.</strong> Only the match against the claimed value was proven cryptographically.</>
-                )}
+                <strong>{PRIVACY_NOTES[activeTab]}</strong> The proof shows the issuer signed this credential.
               </div>
             </div>
 
-            {activeTab === 'signed' && (currentResult.card?.yearOfBirthOnly || currentResult.card?.maskedId) && (
+            {(currentResult.card?.yearOfBirthOnly || currentResult.card?.maskedId) && (
               <div className="privacy-note">
                 <span className="privacy-note-icon">ⓘ</span>
                 <div className="privacy-note-text">
-                  {currentResult.card.yearOfBirthOnly && <div>{YEAR_ONLY_NOTE}</div>}
+                  {currentResult.card.yearOfBirthOnly && activeTab === 'age' && <div>{YEAR_ONLY_NOTE}</div>}
+                  {currentResult.card.yearOfBirthOnly && activeTab !== 'age' && <div>The card shows only a year of birth.</div>}
                   {currentResult.card.maskedId && (
                     <div>Masked Aadhaar: the issuer signed only the last 4 digits of the Aadhaar number.</div>
                   )}
@@ -550,54 +511,36 @@ function ProofStep({ userId, userName, source, onStartOver }) {
                   <div className="proof-attribute-label">Result</div>
                   <div className="proof-attribute-value">{currentResult.message}</div>
                 </div>
+                <div className="proof-attribute">
+                  <div className="proof-attribute-label">Issuer (checked against trusted list)</div>
+                  <div className="proof-attribute-value">
+                    {!currentPolicy
+                      ? '—'
+                      : currentPolicy.issuer.name
+                      ? `✓ ${currentPolicy.issuer.name} (key ${currentPolicy.issuer.keyId})`
+                      : `✕ Untrusted key ${currentPolicy.issuer.keyId}`}
+                  </div>
+                </div>
 
-                {activeTab === 'signed' && (
-                  <>
-                    <div className="proof-attribute">
-                      <div className="proof-attribute-label">Threshold date (public signal)</div>
-                      <div className="proof-attribute-value">{currentResult.thresholdDate || '—'}</div>
+                {activeTab === 'age' && currentPolicy && (
+                  <div className="proof-attribute">
+                    <div className="proof-attribute-label">Born on or before (public signal)</div>
+                    <div className="proof-attribute-value">
+                      {currentPolicy.bornOnOrBefore} {currentPolicy.ageOk ? '✓ 18+ today' : `✕ later than today's cutoff ${currentPolicy.cutoff}`}
                     </div>
-                    <div className="proof-attribute">
-                      <div className="proof-attribute-label">Issuer key (public signal)</div>
-                      <div className="proof-attribute-value">RSA-2048 modulus</div>
-                    </div>
-                  </>
-                )}
-
-                {activeTab === 'age' && (
-                  <>
-                    <div className="proof-attribute">
-                      <div className="proof-attribute-label">
-                        Threshold date (public signal)
-                      </div>
-                      <div className="proof-attribute-value">
-                        {currentResult.thresholdDate || '—'}
-                      </div>
-                    </div>
-                    <div className="proof-attribute">
-                      <div className="proof-attribute-label">
-                        Derived from (not a public signal)
-                      </div>
-                      <div className="proof-attribute-value">
-                        {currentResult.todayDate || '—'}
-                        {currentResult.minimumAgeYears
-                          ? ` − ${currentResult.minimumAgeYears}y`
-                          : ''}
-                      </div>
-                    </div>
-                  </>
+                  </div>
                 )}
 
                 {activeTab === 'name' && (
                   <div className="proof-attribute">
-                    <div className="proof-attribute-label">Claimed Name</div>
+                    <div className="proof-attribute-label">Claimed name (hash is a public signal)</div>
                     <div className="proof-attribute-value">{currentResult.claimedName || '—'}</div>
                   </div>
                 )}
 
                 {activeTab === 'gender' && (
                   <div className="proof-attribute">
-                    <div className="proof-attribute-label">Claimed Gender</div>
+                    <div className="proof-attribute-label">Claimed gender (public signal)</div>
                     <div className="proof-attribute-value">{currentResult.claimedGenderLabel || '—'}</div>
                   </div>
                 )}
@@ -611,37 +554,33 @@ function ProofStep({ userId, userName, source, onStartOver }) {
                     <div className="redacted-block">████████████</div>
                   </div>
                 ))}
-                <div className="proof-attribute">
-                  <div className="proof-attribute-label">Aadhaar Number</div>
-                  <div className="redacted-block">████████████</div>
-                </div>
                 <div className="hidden-note">
                   Private circuit inputs. Not present in proof or public signals.
                 </div>
               </div>
             </div>
 
-            {hasVerifier(activeTab) && currentResult.isValid && (
+            {hasPolicy() && currentResult.isValid && (
               <div className="onchain-section">
                 <div className="onchain-header">
                   <span className="onchain-header-icon">⛓</span>
-                  <span className="onchain-header-title">On-Chain Verification</span>
+                  <span className="onchain-header-title">On-Chain Policy Check</span>
                 </div>
 
-                {currentOnChainLoading && (
+                {(currentOnChainLoading || !currentOnChain) && (
                   <div className="onchain-body onchain-loading">
                     <div className="spinner spinner-small" />
-                    <span className="onchain-loading-text">
-                      Verifying proof on {CHAIN.name}...
-                    </span>
+                    <span className="onchain-loading-text">Asking ZkIdPolicy on {CHAIN.name}...</span>
                   </div>
                 )}
 
-                {!currentOnChainLoading && currentOnChain && currentOnChain.error === null && currentOnChain.onChainValid && (
-                  <div className="onchain-body onchain-success">
-                    <span className="onchain-badge-icon">✓</span>
+                {!currentOnChainLoading && currentOnChain && currentOnChain.error === null && (
+                  <div className={`onchain-body ${currentOnChain.result === 'Accepted' ? 'onchain-success' : 'onchain-fail'}`}>
+                    <span className="onchain-badge-icon">{currentOnChain.result === 'Accepted' ? '✓' : '✕'}</span>
                     <div className="onchain-badge-content">
-                      <div className="onchain-badge-title">Verified on {CHAIN.name}</div>
+                      <div className="onchain-badge-title">
+                        {ONCHAIN_RESULTS[currentOnChain.result] || currentOnChain.result} on {CHAIN.name}
+                      </div>
                       <a
                         className="onchain-contract-link"
                         href={`${CHAIN.explorer}/address/${currentOnChain.contractAddress}`}
@@ -655,26 +594,6 @@ function ProofStep({ userId, userName, source, onStartOver }) {
                   </div>
                 )}
 
-                {!currentOnChainLoading && currentOnChain && currentOnChain.error === null && !currentOnChain.onChainValid && (
-                  <div className="onchain-body onchain-fail">
-                    <span className="onchain-badge-icon">✕</span>
-                    <div className="onchain-badge-content">
-                      <div className="onchain-badge-title">On-chain verification returned false</div>
-                      {currentOnChain.contractAddress && (
-                        <a
-                          className="onchain-contract-link"
-                          href={`${CHAIN.explorer}/address/${currentOnChain.contractAddress}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          {currentOnChain.contractAddress}
-                          <span className="onchain-link-arrow">↗</span>
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                )}
-
                 {!currentOnChainLoading && currentOnChain && currentOnChain.error !== null && (
                   <div className="onchain-body onchain-error">
                     <span className="onchain-badge-icon">⚠</span>
@@ -684,37 +603,18 @@ function ProofStep({ userId, userName, source, onStartOver }) {
                     </div>
                   </div>
                 )}
-
-                {!currentOnChainLoading && !currentOnChain && (
-                  <div className="onchain-body onchain-loading">
-                    <div className="spinner spinner-small" />
-                    <span className="onchain-loading-text">
-                      Initializing on-chain verification...
-                    </span>
-                  </div>
-                )}
               </div>
             )}
 
-            {activeTab === 'signed' && (
-              <>
-                {currentResult.isValid && (
-                  <ProofQR proof={currentResult.proof} publicSignals={currentResult.publicSignals} />
-                )}
-                <StageTrace stages={currentResult.stages} />
-                <div className="step-actions">
-                  <button
-                    className="btn btn-outline btn-full"
-                    onClick={() => {
-                      setResults((prev) => ({ ...prev, signed: null }));
-                      setOnChainResults((prev) => ({ ...prev, signed: null }));
-                    }}
-                  >
-                    Try another credential
-                  </button>
-                </div>
-              </>
+            {activeTab === 'age' && currentResult.isValid && (
+              <ProofQR proof={currentResult.proof} publicSignals={currentResult.publicSignals} />
             )}
+            <StageTrace stages={currentResult.stages} />
+            <div className="step-actions">
+              <button className="btn btn-outline btn-full" onClick={() => startAgain(activeTab)}>
+                Try another credential
+              </button>
+            </div>
 
             <div className="collapsible">
               <div className="collapsible-header" onClick={() => setProofOpen(!proofOpen)}>

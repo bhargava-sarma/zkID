@@ -14,7 +14,7 @@ const DOB_STEPS = [
   {
     label: 'Encoded Date (YYYYMMDD)',
     explanation:
-      'Date encoded as year*10000 + month*100 + day, so integer comparison is chronological comparison. This is the private input to the Age ZK circuit.',
+      'Date encoded as year*10000 + month*100 + day, so integer comparison is chronological comparison.',
   },
 ];
 
@@ -26,7 +26,7 @@ const YEAR_ONLY_STEPS = [
   {
     label: 'Encoded Date (YYYY9999)',
     explanation:
-      'Encoded as year*10000 + 9999, which sorts after every real date in that year, so the age proof can never overstate age. This is the private input to the Age ZK circuit.',
+      'Encoded as year*10000 + 9999, which sorts after every real date in that year, so it can never overstate age.',
   },
 ];
 
@@ -42,14 +42,14 @@ const MASKED_STEP = {
 
 const OTHER_STEPS = [
   {
-    label: 'Name Hash (Circuit Input)',
+    label: 'Name Hash',
     explanation:
-      'SHA-256 hash of the normalized name, converted to a BigInt. This is the private input to the Name ZK circuit.',
+      'SHA-256 hash of the normalized name, converted to a BigInt.',
   },
   {
     label: 'Gender Code',
     explanation:
-      'Gender encoded as integer (1=Male, 2=Female, 3=Other). This is the private input to the Gender ZK circuit.',
+      'Gender encoded as integer (1=Male, 2=Female, 3=Other).',
   },
 ];
 

@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { VERIFIERS, CHAIN, verifierAbi } from "./contractConfig";
+import { CHAIN, POLICY_ABI, POLICY_ADDRESS, POLICY_RESULTS } from "./contractConfig";
 
 // snarkjs -> Solidity calldata. pi_b's inner pairs are reversed for the verifier.
 function formatProofForSolidity(proof) {
@@ -12,30 +12,27 @@ function formatProofForSolidity(proof) {
   return { pA, pB, pC };
 }
 
-// Read-only view call: no wallet or gas needed.
-export async function verifyOnChain(proof, publicSignals, proofType) {
-  const verifier = VERIFIERS[proofType];
-  const contractAddress = verifier?.address;
-  if (!contractAddress) {
-    return {
-      onChainValid: false,
-      contractAddress: null,
-      error: `No on-chain verifier deployed for "${proofType}" proofs.`,
-    };
+// Asks ZkIdPolicy whether it accepts the proof. A read-only view call: no wallet
+// or gas. kind: 'age' for the age proof, anything else for a name/gender proof.
+// result is one of POLICY_RESULTS, or null when the call itself failed.
+export async function checkOnChain(proof, publicSignals, kind) {
+  if (!POLICY_ADDRESS) {
+    return { result: null, contractAddress: null, error: "No ZkIdPolicy is deployed." };
   }
 
   try {
     const provider = new ethers.JsonRpcProvider(CHAIN.rpc);
-    const contract = new ethers.Contract(contractAddress, verifierAbi(verifier.publicSignals), provider);
+    const policy = new ethers.Contract(POLICY_ADDRESS, POLICY_ABI, provider);
     const { pA, pB, pC } = formatProofForSolidity(proof);
-    const result = await contract.verifyProof(pA, pB, pC, publicSignals.map((s) => BigInt(s)));
-    return { onChainValid: Boolean(result), contractAddress, error: null };
+    const signals = publicSignals.map((s) => BigInt(s));
+    const code = kind === "age" ? await policy.checkAge(pA, pB, pC, signals) : await policy.checkMatch(pA, pB, pC, signals);
+    return { result: POLICY_RESULTS[Number(code)] ?? `Unknown (${code})`, contractAddress: POLICY_ADDRESS, error: null };
   } catch (err) {
-    console.error(`[ON-CHAIN:${proofType.toUpperCase()}] Verification error:`, err);
+    console.error(`[ON-CHAIN:${kind.toUpperCase()}] Policy check error:`, err);
     let errorMessage = err.message || "Unknown error during on-chain verification.";
     if (errorMessage.length > 200) {
       errorMessage = errorMessage.substring(0, 200) + "...";
     }
-    return { onChainValid: false, contractAddress, error: errorMessage };
+    return { result: null, contractAddress: POLICY_ADDRESS, error: errorMessage };
   }
 }

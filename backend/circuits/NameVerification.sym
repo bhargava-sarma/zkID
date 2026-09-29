@@ -1,8 +1,0 @@
-1,1,2,main.claimedNameHash
-2,2,2,main.nameHash
-3,-1,1,main.eq.out
-4,-1,1,main.eq.in[0]
-5,-1,1,main.eq.in[1]
-6,-1,0,main.eq.isz.out
-7,3,0,main.eq.isz.in
-8,4,0,main.eq.isz.inv

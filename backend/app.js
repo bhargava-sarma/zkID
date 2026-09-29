@@ -6,11 +6,11 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const { extractAadhaarData } = require('./ocr');
 const { YEAR_ONLY_DOB, MASKED_AADHAAR } = require('./aadhaartext');
-const { preprocessData, computeNameHash } = require('./preprocessing');
-const { storeUser, getUserById } = require('./db');
-const { generateProof, generateNameProof, generateGenderProof } = require('./proofgen');
+const { preprocessData } = require('./preprocessing');
+const { storeUser } = require('./db');
 const { buildCanonicalPayload, cardNotes, signCredential, CredentialError } = require('./signedcredential');
 const { generateComposedProof, proverInput, serverProvingAvailable } = require('./composedproof');
+const { generateMatchProof, matchProvingAvailable, parseClaims, ClaimError } = require('./matchproof');
 
 const app = express();
 
@@ -103,7 +103,11 @@ function storeProcessed(processed) {
 }
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', serverProving: serverProvingAvailable(), timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    serverProving: serverProvingAvailable() && matchProvingAvailable(),
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.post('/api/upload', upload.single('aadhaar'), async (req, res) => {
@@ -144,99 +148,6 @@ app.post('/api/upload', upload.single('aadhaar'), async (req, res) => {
       error: err.message || 'Server error during upload processing.',
       stages,
     });
-  }
-});
-
-app.post('/api/generate-proof', async (req, res) => {
-  try {
-    const { userId } = req.body;
-    if (!userId) return res.status(400).json({ error: 'userId is required.' });
-
-    const user = await getUserById(userId);
-    if (!user) return res.status(404).json({ error: 'User not found.' });
-
-    const result = await generateProof(user.dob_encoded);
-
-    res.json({
-      proof: result.proof,
-      publicSignals: result.publicSignals,
-      isValid: result.isValid,
-      message: result.message,
-      thresholdDate: result.thresholdDate,
-      todayDate: result.todayDate,
-      minimumAgeYears: result.minimumAgeYears,
-      proofDuration: result.proofDuration,
-      verificationDuration: result.verificationDuration,
-    });
-  } catch (err) {
-    console.error('[PROOF:AGE] Error:', err.message);
-    const statusCode = err.message.includes('Age condition') ? 400 : 500;
-    res.status(statusCode).json({ error: err.message || 'Proof generation failed.' });
-  }
-});
-
-app.post('/api/generate-name-proof', async (req, res) => {
-  try {
-    const { userId, claimedName } = req.body;
-    if (!userId) return res.status(400).json({ error: 'userId is required.' });
-    if (!claimedName) return res.status(400).json({ error: 'claimedName is required.' });
-
-    const user = await getUserById(userId);
-    if (!user) return res.status(404).json({ error: 'User not found.' });
-
-    if (!user.name_hash) {
-      return res.status(400).json({ error: 'User does not have a name hash stored. Re-upload with the latest version.' });
-    }
-
-    const claimedNameHash = computeNameHash(claimedName);
-    const result = await generateNameProof(user.name_hash, claimedNameHash);
-
-    res.json({
-      proof: result.proof,
-      publicSignals: result.publicSignals,
-      isValid: result.isValid,
-      message: result.message,
-      claimedName,
-      claimedNameHash,
-      proofDuration: result.proofDuration,
-      verificationDuration: result.verificationDuration,
-    });
-  } catch (err) {
-    console.error('[PROOF:NAME] Error:', err.message);
-    const statusCode = err.message.includes('does not match') ? 400 : 500;
-    res.status(statusCode).json({ error: err.message || 'Name proof generation failed.' });
-  }
-});
-
-app.post('/api/generate-gender-proof', async (req, res) => {
-  try {
-    const { userId, claimedGender } = req.body;
-    if (!userId) return res.status(400).json({ error: 'userId is required.' });
-    if (!claimedGender) return res.status(400).json({ error: 'claimedGender is required (1=Male, 2=Female, 3=Other).' });
-
-    const user = await getUserById(userId);
-    if (!user) return res.status(404).json({ error: 'User not found.' });
-
-    if (user.gender_code == null) {
-      return res.status(400).json({ error: 'User does not have a gender code stored. Gender may not have been detected during OCR.' });
-    }
-
-    const result = await generateGenderProof(user.gender_code, parseInt(claimedGender));
-
-    res.json({
-      proof: result.proof,
-      publicSignals: result.publicSignals,
-      isValid: result.isValid,
-      message: result.message,
-      claimedGender: parseInt(claimedGender),
-      claimedGenderLabel: result.claimedGenderLabel,
-      proofDuration: result.proofDuration,
-      verificationDuration: result.verificationDuration,
-    });
-  } catch (err) {
-    console.error('[PROOF:GENDER] Error:', err.message);
-    const statusCode = err.message.includes('does not match') ? 400 : 500;
-    res.status(statusCode).json({ error: err.message || 'Gender proof generation failed.' });
   }
 });
 
@@ -314,7 +225,7 @@ async function issueSignedCredential(req, pushStage) {
 }
 
 function sendSignedError(res, err, stages) {
-  if (err instanceof BadRequest) {
+  if (err instanceof BadRequest || err instanceof ClaimError) {
     return res.status(400).json({ error: err.message });
   }
   if (err instanceof CredentialError) {
@@ -366,6 +277,26 @@ app.post('/api/signed-proof', upload.single('image'), async (req, res) => {
       verificationDuration: result.verificationDuration,
       stages,
     });
+  } catch (err) {
+    sendSignedError(res, err, stages);
+  }
+});
+
+// Issue, sign and prove a name and/or gender claim on the server:
+// { claimedName?, claimedGender? (M, F or O) } plus an image or a scenario.
+app.post('/api/signed-match-proof', upload.single('image'), async (req, res) => {
+  const stages = [];
+  const pushStage = (...args) => stages.push(stage(...args));
+
+  try {
+    const claims = parseClaims(req.body);
+    const { card, circuitInputs } = await issueSignedCredential(req, pushStage);
+
+    pushStage('proof_started', 'running', 'RSA verify + in-circuit name/gender match...');
+    const result = await generateMatchProof(circuitInputs, claims);
+    pushStage('proof_complete', 'complete', `Proved in ${result.proofDuration}ms`);
+
+    res.json({ success: true, guarantee: 'issuer-signed', card, ...result, stages });
   } catch (err) {
     sendSignedError(res, err, stages);
   }
