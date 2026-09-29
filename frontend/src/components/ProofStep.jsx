@@ -3,6 +3,7 @@ import axios from 'axios';
 import { verifyOnChain } from '../contracts/onChainVerify';
 import { hasVerifier, CHAIN } from '../contracts/contractConfig';
 import { proveInBrowser } from '../prover/proveInBrowser';
+import ProofQR from './ProofQR';
 
 const PROOF_STAGES = [
   'Preparing circuit inputs...',
@@ -42,6 +43,8 @@ const UPLOADED = 'uploaded';
 const SIGNED_SCENARIOS = [
   { key: 'valid', label: 'Valid adult' },
   { key: 'underage', label: 'Underage' },
+  { key: 'year_only', label: 'Year of birth only' },
+  { key: 'masked_id', label: 'Masked Aadhaar' },
   { key: 'ocr_fail', label: 'Unreadable' },
   { key: 'gender_missing', label: 'No gender' },
   { key: 'dob_garbled', label: 'Garbled DOB' },
@@ -66,6 +69,10 @@ const STAGE_LABELS = {
   proof_complete: 'Proof generated',
   error: 'Stopped',
 };
+
+const UNDERAGE = 'This credential does not meet the minimum age requirement.';
+const YEAR_ONLY_NOTE =
+  'The card shows only a year of birth, so the check assumes the latest possible birthday in that year.';
 
 const HIDDEN_FIELDS = {
   signed: ['Date of Birth', 'Name', 'Gender'],
@@ -185,14 +192,15 @@ function ProofStep({ userId, userName, source, onStartOver }) {
   // The server only issues the credential; proving happens on this device.
   const proveSignedInBrowser = async () => {
     const { data } = await postCredentialSource('/api/issue-credential');
-    const { input, stages } = data;
+    const { input, stages, card } = data;
 
     // Age rule checked first, so an underage holder gets a clear answer instead of a failed proof.
+    // A year-only YYYY-99-99 compares after every date in that year, as in the circuit.
     const at = input.dobIndex + 7;
     const dob = String.fromCharCode(...input.msg.slice(at, at + 10));
     if (Number(dob.replaceAll('-', '')) > input.thresholdDate) {
       const failure = {
-        error: 'This credential does not meet the minimum age requirement.',
+        error: card?.yearOfBirthOnly ? `${UNDERAGE} ${YEAR_ONLY_NOTE}` : UNDERAGE,
         code: 'AGE_REQUIREMENT_NOT_MET',
         reason: 'underage',
         retryable: false,
@@ -210,6 +218,7 @@ function ProofStep({ userId, userName, source, onStartOver }) {
     });
     return {
       ...result,
+      card,
       message: 'AGE_OVER_18: VERIFIED (proved in your browser)',
       thresholdDate: input.thresholdDate,
       stages: [...stages, { name: 'proof_complete', status: 'complete', detail: `Proved in your browser in ${result.proofDuration}ms` }],
@@ -519,6 +528,18 @@ function ProofStep({ userId, userName, source, onStartOver }) {
               </div>
             </div>
 
+            {activeTab === 'signed' && (currentResult.card?.yearOfBirthOnly || currentResult.card?.maskedId) && (
+              <div className="privacy-note">
+                <span className="privacy-note-icon">ⓘ</span>
+                <div className="privacy-note-text">
+                  {currentResult.card.yearOfBirthOnly && <div>{YEAR_ONLY_NOTE}</div>}
+                  {currentResult.card.maskedId && (
+                    <div>Masked Aadhaar: the issuer signed only the last 4 digits of the Aadhaar number.</div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="proof-panels">
               <div className="proof-panel">
                 <div className="proof-panel-title">What Verifier Sees</div>
@@ -677,6 +698,9 @@ function ProofStep({ userId, userName, source, onStartOver }) {
 
             {activeTab === 'signed' && (
               <>
+                {currentResult.isValid && (
+                  <ProofQR proof={currentResult.proof} publicSignals={currentResult.publicSignals} />
+                )}
                 <StageTrace stages={currentResult.stages} />
                 <div className="step-actions">
                   <button

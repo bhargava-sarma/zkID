@@ -7,61 +7,25 @@ require.resolve('tesseract.js-core/tesseract-core.wasm');
 require.resolve('tesseract.js-core/tesseract-core-simd.wasm');
 require.resolve('tesseract.js-core/tesseract-core-lstm.wasm');
 require.resolve('tesseract.js-core/tesseract-core-simd-lstm.wasm');
-const { isCalendarDate } = require('../mock-issuer/sign_credential');
+const { parseAadhaarText, YEAR_ONLY_DOB, MASKED_AADHAAR } = require('./aadhaartext');
+
+// English plus Hindi: with English alone, Hindi lines come out as Latin noise
+// that can pass for a name. OCR_LANGS adds other scripts, e.g. eng+hin+tam.
+const OCR_LANGS = process.env.OCR_LANGS || 'eng+hin';
 
 async function extractAadhaarData(imageBuffer) {
-  console.log('[OCR] Starting Tesseract recognition...');
+  console.log(`[OCR] Starting Tesseract recognition (${OCR_LANGS})...`);
   const startTime = Date.now();
 
   const {
     data: { text },
-  } = await Tesseract.recognize(imageBuffer, 'eng', { cachePath: os.tmpdir() }); // writable on serverless hosts
+  } = await Tesseract.recognize(imageBuffer, OCR_LANGS, { cachePath: os.tmpdir() }); // writable on serverless hosts
 
   console.log(`[OCR] Recognition complete in ${Date.now() - startTime}ms`);
   console.log(`[OCR] Raw text preview: "${text.substring(0, 50).replace(/\n/g, ' ')}..."`);
 
-  const result = {
-    rawText: text,
-    name: null,
-    dob: null,
-    aadhaarNumber: null,
-    gender: null,
-  };
-
-  // Prefer a labelled "DOB: DD/MM/YYYY", else the first DD/MM/YYYY anywhere.
-  const dobMatch =
-    text.match(/DOB\s*[:\-]\s*(\d{2}\/\d{2}\/\d{4})/i) || text.match(/(\d{2}\/\d{2}\/\d{4})/);
-  if (dobMatch) result.dob = dobMatch[1];
-
-  const aadhaarMatch = text.match(/(\d{4}\s\d{4}\s\d{4})/);
-  if (aadhaarMatch) result.aadhaarNumber = aadhaarMatch[1];
-
-  const genderMatch = text.match(/\b(Male|Female|Transgender|Other)\b/i);
-  if (genderMatch) {
-    const raw = genderMatch[1].toLowerCase();
-    result.gender = raw === 'male' ? 'Male' : raw === 'female' ? 'Female' : 'Other';
-  }
+  const result = parseAadhaarText(text);
   console.log(`[OCR] Gender detected: ${result.gender || 'not found'}`);
-
-  // Name is the line immediately above the DOB line.
-  if (result.dob) {
-    const lines = text
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0);
-    const dobLine = lines.findIndex((l) => l.includes(result.dob) || /DOB/i.test(l));
-    if (dobLine > 0) {
-      const nameCandidate = lines[dobLine - 1].replace(/[^a-zA-Z\s]/g, '').trim();
-      if (nameCandidate.length > 1) result.name = nameCandidate;
-    }
-
-    // A misread like 31/02 is dropped, never passed on as a real DOB.
-    const [day, month, year] = result.dob.split('/').map(Number);
-    if (!isCalendarDate(year, month, day)) {
-      console.log('[OCR] DOB is not a real calendar date; treating as unreadable');
-      result.dob = null;
-    }
-  }
 
   const missing = [];
   if (!result.name) missing.push('Name');
@@ -75,7 +39,9 @@ async function extractAadhaarData(imageBuffer) {
     );
   }
 
-  console.log(`[OCR] Extracted — Name: ${result.name}, DOB: **/**/****, Gender: ${result.gender || 'N/A'}, Aadhaar: ****-****-${result.aadhaarNumber.slice(-4)}`);
+  const dobShown = YEAR_ONLY_DOB.test(result.dob) ? '**** (year only)' : '**/**/****';
+  const idShown = `****-****-${result.aadhaarNumber.slice(-4)}${MASKED_AADHAAR.test(result.aadhaarNumber) ? ' (masked)' : ''}`;
+  console.log(`[OCR] Extracted — Name: ${result.name}, DOB: ${dobShown}, Gender: ${result.gender || 'N/A'}, Aadhaar: ${idShown}`);
 
   return result;
 }

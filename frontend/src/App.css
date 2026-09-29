@@ -714,8 +714,8 @@ body {
 
 .demo-cards {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
 }
 
 .demo-card {
@@ -725,17 +725,9 @@ body {
   transition: all 0.2s ease;
 }
 
-.demo-card + .demo-card {
-  border-left: none;
-}
-
 .demo-card:hover {
   background: rgba(255, 255, 255, 0.02);
   border-color: var(--text-muted);
-}
-
-.demo-card:hover + .demo-card {
-  border-left-color: var(--text-muted);
 }
 
 .demo-card-icon {
@@ -1157,6 +1149,188 @@ body {
   text-overflow: ellipsis;
 }
 
+/* =================== HEADER NAV =================== */
+
+.header-nav {
+  margin-top: 16px;
+}
+
+.header-nav a {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 2px;
+  transition: color 0.15s ease;
+}
+
+.header-nav a:hover {
+  color: var(--text-primary);
+  border-bottom-color: var(--text-primary);
+}
+
+/* =================== PROOF QR CODE =================== */
+
+.qr-show {
+  margin-bottom: 24px;
+}
+
+.qr-section {
+  border: 1px solid var(--border);
+  margin-bottom: 24px;
+  animation: fadeSlideIn 0.4s ease forwards;
+}
+
+.qr-body {
+  display: flex;
+  gap: 24px;
+  padding: 20px;
+  align-items: flex-start;
+}
+
+/* Dark modules on white, with its own quiet zone, so cameras read it on a dark page. */
+.qr-image {
+  width: 240px;
+  height: 240px;
+  background: #ffffff;
+  flex-shrink: 0;
+  image-rendering: pixelated;
+}
+
+.qr-text p {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+.qr-text .qr-warning {
+  color: var(--warning);
+}
+
+.qr-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+a.btn {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+/* =================== VERIFY PAGE =================== */
+
+.verify-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.camera-view {
+  display: block;
+  width: 100%;
+  max-height: 60vh;
+  background: #000000;
+  border: 1px solid var(--border);
+  object-fit: contain;
+}
+
+.verify-verdict {
+  border: 1px solid var(--border);
+  padding: 24px;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.verify-verdict.accepted {
+  border-color: var(--accent);
+  background: rgba(0, 255, 136, 0.04);
+}
+
+.verify-verdict.rejected {
+  border-color: var(--error);
+  background: rgba(255, 68, 68, 0.04);
+}
+
+.verify-verdict-icon {
+  font-size: 36px;
+  margin-bottom: 12px;
+}
+
+.verify-verdict-title {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+.verify-verdict.accepted .verify-verdict-title {
+  color: var(--accent);
+}
+
+.verify-verdict.rejected .verify-verdict-title {
+  color: var(--error);
+}
+
+.verify-verdict-reason {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.verify-checks {
+  margin-bottom: 24px;
+}
+
+.verify-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.verify-check + .verify-check {
+  border-top: none;
+}
+
+.verify-check-icon {
+  width: 20px;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.verify-check.status-complete .verify-check-icon {
+  color: var(--accent);
+}
+
+.verify-check.status-failed .verify-check-icon,
+.verify-check.status-failed .verify-check-title {
+  color: var(--error);
+}
+
+.verify-check.status-pending {
+  color: var(--text-muted);
+}
+
+.verify-check-title {
+  margin-bottom: 4px;
+}
+
+.verify-check-detail {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
 /* =================== RESPONSIVE =================== */
 
 @media (max-width: 640px) {
@@ -1195,9 +1369,13 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .demo-card + .demo-card {
-    border-left: 1px solid var(--border);
-    border-top: none;
+  .qr-body {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .verify-actions {
+    grid-template-columns: 1fr;
   }
 
   .proof-timing {

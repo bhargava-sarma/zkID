@@ -30,7 +30,7 @@ function StorageStep({ data, onNext }) {
         <div className="storage-row">
           <span className="storage-key">aadhaar_hash</span>
           <span className="storage-value">
-            {stored.aadhaar_hash ? stored.aadhaar_hash.substring(0, 24) + '...' : ''}
+            {stored.aadhaar_hash ? stored.aadhaar_hash.substring(0, 24) + '...' : '—'}
           </span>
         </div>
         <div className="storage-row">
