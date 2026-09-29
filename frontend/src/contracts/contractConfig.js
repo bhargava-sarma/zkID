@@ -1,14 +1,10 @@
 import addresses from "./addresses.json";
 
-// Written by `hardhat deploy-verifier`. A proof type without an address has no on-chain check.
-export const VERIFIERS = {
-  age: { address: addresses.AgeVerifier, publicSignals: 1 },
-  name: { address: addresses.NameVerifier, publicSignals: 1 },
-  gender: { address: addresses.GenderVerifier, publicSignals: 1 },
-  signed: { address: addresses.CredentialAgeVerifier, publicSignals: 18 },
-};
-
-export const hasVerifier = (proofType) => Boolean(VERIFIERS[proofType]?.address);
+// ZkIdPolicy checks every proof on-chain: trusted issuer, the age cutoff, then
+// the Groth16 verifier. Written by `npm run deploy:policy`; without it the app
+// hides the on-chain check.
+export const POLICY_ADDRESS = addresses.ZkIdPolicy || null;
+export const hasPolicy = () => Boolean(POLICY_ADDRESS);
 
 // The RPC must be CORS-enabled: calls come from the browser.
 export const CHAIN = {
@@ -17,6 +13,11 @@ export const CHAIN = {
   explorer: "https://sepolia.etherscan.io",
 };
 
-export const verifierAbi = (publicSignals) => [
-  `function verifyProof(uint256[2] calldata _pA, uint256[2][2] calldata _pB, uint256[2] calldata _pC, uint256[${publicSignals}] calldata _pubSignals) public view returns (bool)`,
+const PROOF_ARGS = "uint256[2] pA, uint256[2][2] pB, uint256[2] pC";
+export const POLICY_ABI = [
+  `function checkAge(${PROOF_ARGS}, uint256[18] pubSignals) view returns (uint8)`,
+  `function checkMatch(${PROOF_ARGS}, uint256[19] pubSignals) view returns (uint8)`,
 ];
+
+// ZkIdPolicy.Result, in declaration order.
+export const POLICY_RESULTS = ["Accepted", "UntrustedIssuer", "CutoffTooLate", "NothingClaimed", "InvalidProof"];

@@ -105,7 +105,6 @@ function App() {
             )}
             {currentStep === 4 && (
               <ProofStep
-                userId={uploadData?.userId}
                 userName={uploadData?.stored?.name}
                 source={source}
                 onStartOver={handleStartOver}

@@ -1,0 +1,23 @@
+{
+  "release": "https://github.com/bhargava-sarma/zkID/releases/download/circuit-match-v1",
+  "files": [
+    {
+      "name": "cmp_final.zkey",
+      "path": "cmp_final.zkey",
+      "bytes": 135069087,
+      "sha256": "db04ec0700a62c7d8a24d277286c40e9e0322ff81860d0de0c2360601156e794"
+    },
+    {
+      "name": "credential_match_proof.wasm",
+      "path": "credential_match_proof_js/credential_match_proof.wasm",
+      "bytes": 3166826,
+      "sha256": "599400109057349f13a99322c90ed666f3fc763b0d3e1405fa7168cbf8bbe20c"
+    },
+    {
+      "name": "match_verification_key.json",
+      "path": "match_verification_key.json",
+      "bytes": 6220,
+      "sha256": "1bb20a080d47d03ee32b26bc98c82c8764e2cd4412b8361727eea4ad6065756d"
+    }
+  ]
+}

@@ -7,7 +7,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "test": "node --test \"test/*.test.js\"",
-    "fetch-circuit": "node circuits/credential-age-proof/fetch_artifacts.js"
+    "fetch-circuit": "node circuits/credential-age-proof/fetch_artifacts.js && node circuits/credential-match-proof/fetch_artifacts.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
@@ -15,6 +15,7 @@
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "multer": "^1.4.5-lts.1",
+    "poseidon-lite": "^0.3.0",
     "snarkjs": "^0.7.3",
     "tesseract.js": "^5.0.4"
   }

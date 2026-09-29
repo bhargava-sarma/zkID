@@ -7,8 +7,17 @@ const path = require('path');
 
 const CAP_DIR = path.join(__dirname, 'circuits', 'credential-age-proof');
 const { buildCircuitInput } = require('./circuits/credential-age-proof/gen_input');
-const { computeThresholdDate } = require('./proofgen');
 const { CredentialError, unavailable } = require('./signedcredential');
+
+const MINIMUM_AGE_YEARS = 18;
+
+// Latest qualifying DOB: today as year*10000 + month*100 + day (UTC), minus 18
+// years. Pure integer arithmetic, so no leap-year or Feb 29 rollover issues.
+// ZkIdPolicy.cutoffDate and the verifier page use the same arithmetic.
+function computeThresholdDate(now = new Date()) {
+  const today = now.getUTCFullYear() * 10000 + (now.getUTCMonth() + 1) * 100 + now.getUTCDate();
+  return today - MINIMUM_AGE_YEARS * 10000;
+}
 
 const CAP_WASM = path.join(CAP_DIR, 'credential_age_proof_js', 'credential_age_proof.wasm');
 const CAP_ZKEY = path.join(CAP_DIR, 'cap_final.zkey');
@@ -92,4 +101,4 @@ function serverProvingAvailable() {
   return [CAP_WASM, CAP_ZKEY, CAP_VKEY].every((p) => fs.existsSync(p));
 }
 
-module.exports = { generateComposedProof, proverInput, serverProvingAvailable };
+module.exports = { generateComposedProof, proverInput, serverProvingAvailable, computeThresholdDate };

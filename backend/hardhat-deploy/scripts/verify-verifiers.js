@@ -1,6 +1,12 @@
-// Publishes the source of every verifier in addresses.json: to Sourcify always
+// Publishes the source of every contract in addresses.json: to Sourcify always
 // (no key needed), and to Etherscan when ETHERSCAN_API_KEY is set.
+const fs = require("fs");
+const path = require("path");
 const ADDRESSES = require("../../../frontend/src/contracts/addresses.json");
+
+// ABI-encoded constructor arguments by address, written by the deploy scripts.
+const ARGS_PATH = path.join(__dirname, "..", "constructor-args.json");
+const CONSTRUCTOR_ARGS = fs.existsSync(ARGS_PATH) ? JSON.parse(fs.readFileSync(ARGS_PATH, "utf8")) : {};
 
 const SOURCIFY = "https://sourcify.dev/server";
 const ETHERSCAN = "https://api.etherscan.io/v2/api";
@@ -55,6 +61,7 @@ async function etherscan(chainId, address, fqn, buildInfo, apikey) {
       codeformat: "solidity-standard-json-input",
       contractname: fqn,
       compilerversion: `v${buildInfo.solcLongVersion}`,
+      constructorArguements: CONSTRUCTOR_ARGS[address] || "", // Etherscan's spelling
     }),
   });
   if (submit.status !== "1") {

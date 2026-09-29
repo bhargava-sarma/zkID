@@ -1,0 +1,10 @@
+{
+  "name": "credential-match-proof",
+  "private": true,
+  "description": "Composed circuit: RSA-2048 signature check + in-circuit name and gender match.",
+  "dependencies": {
+    "@zk-email/circuits": "6.3.4",
+    "circomlib": "2.0.5",
+    "poseidon-lite": "0.3.0"
+  }
+}

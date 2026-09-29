@@ -4,11 +4,11 @@
   "description": "zkID Groth16 verifier contracts (Ethereum Sepolia)",
   "scripts": {
     "compile": "hardhat compile",
-    "deploy:all": "npm run deploy:age && npm run deploy:name && npm run deploy:gender && npm run deploy:credential",
-    "deploy:age": "hardhat deploy-verifier --contract AgeVerifier --network sepolia",
-    "deploy:name": "hardhat deploy-verifier --contract NameVerifier --network sepolia",
-    "deploy:gender": "hardhat deploy-verifier --contract GenderVerifier --network sepolia",
+    "test": "hardhat test",
+    "deploy:all": "npm run deploy:credential && npm run deploy:match && npm run deploy:policy",
     "deploy:credential": "hardhat deploy-verifier --contract CredentialAgeVerifier --network sepolia",
+    "deploy:match": "hardhat deploy-verifier --contract CredentialMatchVerifier --network sepolia",
+    "deploy:policy": "hardhat deploy-policy --network sepolia",
     "verify": "hardhat verify-verifiers --network sepolia"
   },
   "devDependencies": {

@@ -6,6 +6,12 @@ import * as snarkjs from 'snarkjs';
 const BASE = '/circuit';
 const CACHE = 'zkid-circuit';
 
+// age: CredentialAgeProof (circuit-v1). match: CredentialMatchProof (name and gender).
+const CIRCUITS = {
+  age: { wasm: 'credential_age_proof.wasm', zkey: 'cap_final.zkey', vkey: 'verification_key.json' },
+  match: { wasm: 'credential_match_proof.wasm', zkey: 'cmp_final.zkey', vkey: 'match_verification_key.json' },
+};
+
 const post = (msg) => self.postMessage(msg);
 
 async function sha256Hex(bytes) {
@@ -56,15 +62,21 @@ async function loadArtifact(entry) {
   return data;
 }
 
-self.onmessage = async ({ data: { input } }) => {
+self.onmessage = async ({ data: { input, circuit = 'age' } }) => {
   try {
+    const files = CIRCUITS[circuit];
+    if (!files) throw new Error(`Unknown circuit "${circuit}".`);
     const manifest = await (await fetch(`${BASE}/manifest.json`, { cache: 'no-store' })).json();
-    const entry = (name) => manifest.files.find((f) => f.name === name);
+    const entry = (name) => {
+      const found = manifest.files.find((f) => f.name === name);
+      if (!found) throw new Error(`${name} is not staged. Run the frontend build again.`);
+      return found;
+    };
 
     post({ type: 'stage', stage: 'loading' });
-    const wasm = await loadArtifact(entry('credential_age_proof.wasm'));
-    const zkey = await loadArtifact(entry('cap_final.zkey'));
-    const vkey = JSON.parse(new TextDecoder().decode(await loadArtifact(entry('verification_key.json'))));
+    const wasm = await loadArtifact(entry(files.wasm));
+    const zkey = await loadArtifact(entry(files.zkey));
+    const vkey = JSON.parse(new TextDecoder().decode(await loadArtifact(entry(files.vkey))));
 
     post({ type: 'stage', stage: 'proving' });
     const started = performance.now();

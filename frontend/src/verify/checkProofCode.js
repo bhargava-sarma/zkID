@@ -1,19 +1,6 @@
-import { bigIntToLimbs, decodeProofCode, issuerKeyId } from './proofCode.js';
+import { decodeProofCode } from './proofCode.js';
+import { cutoffDate, formatDate, trustedIssuerKeys } from './policy.js';
 import { TRUSTED_ISSUERS } from './trustedIssuers.js';
-
-export const MINIMUM_AGE_YEARS = 18;
-
-// Latest birth date that is 18 or older today: year*10000 + month*100 + day in
-// UTC, minus 18 years. The same arithmetic as the backend's computeThresholdDate.
-export function cutoffDate(now = new Date()) {
-  const today = now.getUTCFullYear() * 10000 + (now.getUTCMonth() + 1) * 100 + now.getUTCDate();
-  return today - MINIMUM_AGE_YEARS * 10000;
-}
-
-export function formatDate(yyyymmdd) {
-  const s = String(yyyymmdd).padStart(8, '0');
-  return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6)}`;
-}
 
 async function sha256Hex(bytes) {
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
@@ -51,11 +38,7 @@ export async function checkProofCode(code, { now = new Date(), issuers = TRUSTED
     return { accepted: false, unreadable: err.message };
   }
 
-  let issuer = null;
-  for (const candidate of issuers) {
-    const limbs = bigIntToLimbs(BigInt(`0x${candidate.modulusHex}`));
-    if ((await issuerKeyId(limbs)) === decoded.keyId) issuer = { name: candidate.name, limbs };
-  }
+  const issuer = (await trustedIssuerKeys(issuers)).find((i) => i.keyId === decoded.keyId) || null;
 
   let proofValid = null;
   if (issuer) {

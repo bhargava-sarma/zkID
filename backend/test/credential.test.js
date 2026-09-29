@@ -54,7 +54,7 @@ test('the signer accepts only the documented variant forms', () => {
   }
 });
 
-test('legacy path: year-only encodes as YYYY9999, masked stores no hash', () => {
+test('stored record: year-only encodes as YYYY9999, masked stores no hash', () => {
   const yearOnly = preprocessData(OCR.yearOnly.name, OCR.yearOnly.dob, OCR.yearOnly.aadhaarNumber, OCR.yearOnly.gender);
   assert.equal(yearOnly.dobEncoded, 19859999);
   assert.equal(yearOnly.transformations[1].label, 'Encoded Date (YYYY9999)');
@@ -67,14 +67,6 @@ test('legacy path: year-only encodes as YYYY9999, masked stores no hash', () => 
   const full = preprocessData(OCR.full.name, OCR.full.dob, OCR.full.aadhaarNumber, OCR.full.gender);
   assert.equal(full.dobEncoded, 19900101);
   assert.match(full.aadhaarHash, /^[0-9a-f]{64}$/);
-});
-
-test('the legacy age circuit treats YYYY9999 as after every date that year', async () => {
-  const wasm = path.join(__dirname, '..', 'circuits', 'AgeVerification_js', 'AgeVerification.wasm');
-  const run = (dobEncoded) => snarkjs.wtns.calculate({ dobEncoded, thresholdDate: 20080928 }, wasm, { type: 'mem' });
-  await run(19859999);
-  await run(20079999);
-  await assert.rejects(run(20089999), /Assert Failed/);
 });
 
 test('the v1 circuit accepts the variant forms without changes', { skip: needsCircuit }, async () => {
