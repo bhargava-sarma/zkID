@@ -51,14 +51,11 @@ async function deployContract(hre, contract, args = []) {
   return address;
 }
 
-// ZkIdPolicy over the deployed verifiers, trusting the mock issuer's key.
-async function deployPolicy(hre) {
-  const addresses = JSON.parse(fs.readFileSync(ADDRESSES_PATH, "utf8"));
-  for (const name of ["CredentialAgeVerifier", "CredentialMatchVerifier"]) {
-    if (!addresses[name]) throw new Error(`Deploy ${name} first: it is not in addresses.json.`);
-  }
-  const issuer = require("../../../mock-issuer/circuit_inputs.json").modulus_limbs;
-  return deployContract(hre, "ZkIdPolicy", [addresses.CredentialAgeVerifier, addresses.CredentialMatchVerifier, issuer]);
+// Retired. v1's ZkIdPolicy trusted the mock issuer key, whose private half was
+// committed to git, so it accepted forged proofs (SECURITY_NOTES.md). v1 has no
+// trustworthy issuer to deploy with, and v2 must not reuse these contracts.
+async function deployPolicy() {
+  throw new Error("The v1 ZkIdPolicy is retired and must not be redeployed: see SECURITY_NOTES.md.");
 }
 
 module.exports = { deployContract, deployPolicy };

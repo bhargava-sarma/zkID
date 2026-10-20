@@ -2,15 +2,18 @@
 // `npm run fetch-circuit` in backend/ first.
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { codeFromText, decodeProofCode, encodeProofCode, verifierLink } from './proofCode.js';
 import { checkProofCode } from './checkProofCode.js';
-import { TRUSTED_ISSUERS } from './trustedIssuers.js';
 
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
-const { proof, publicSignals } = JSON.parse(fs.readFileSync(here('./fixtures/signed-proof.json'), 'utf8'));
+// A synthetic credential's proof under a discarded test key
+// (tools/test-issuer/regenerate_v1_fixtures.js).
+const fixture = JSON.parse(fs.readFileSync(here('./fixtures/test-signed-proof.json'), 'utf8'));
+const { proof, publicSignals } = fixture;
+// Trusted only inside these tests: the shipped list (trustedIssuers.js) is empty.
+const TEST_ISSUERS = [{ name: 'test fixture issuer', modulusHex: fixture.issuer_modulus_hex }];
 const VKEY = here('../../../backend/circuits/credential-age-proof/verification_key.json');
 const vkey = fs.existsSync(VKEY) ? JSON.parse(fs.readFileSync(VKEY, 'utf8')) : null;
 const needsVkey = vkey ? false : 'run npm run fetch-circuit in backend/ first';
@@ -21,12 +24,6 @@ const code = await encodeProofCode(proof, publicSignals);
 
 // snarkjs keeps worker threads for the curve alive between calls.
 after(() => globalThis.curve_bn128?.terminate());
-
-test('the trusted issuer is the mock issuer key', () => {
-  const pem = fs.readFileSync(here('../../../mock-issuer/mock_issuer_public.pem'), 'utf8');
-  const modulus = Buffer.from(crypto.createPublicKey(pem).export({ format: 'jwk' }).n, 'base64url');
-  assert.equal(TRUSTED_ISSUERS[0].modulusHex, modulus.toString('hex'));
-});
 
 test('a code round-trips and is found in a verifier link', () => {
   assert.equal(code.length, 360);
@@ -45,28 +42,29 @@ test('malformed codes are unreadable, not errors', async () => {
   const wrongVersion = Buffer.from(code, 'base64url');
   wrongVersion[0] = 2;
   for (const text of ['not-a-code', code.slice(0, 200), wrongVersion.toString('base64url')]) {
-    const result = await checkProofCode(text, { now: PROVED_ON, vkey });
+    const result = await checkProofCode(text, { now: PROVED_ON, vkey, issuers: TEST_ISSUERS });
     assert.equal(result.accepted, false);
     assert.ok(result.unreadable);
   }
 });
 
 test('accepted: trusted issuer, valid proof, 18+ today', { skip: needsVkey }, async () => {
-  const result = await checkProofCode(code, { now: PROVED_ON, vkey });
+  const result = await checkProofCode(code, { now: PROVED_ON, vkey, issuers: TEST_ISSUERS });
   assert.equal(result.accepted, true);
-  assert.equal(result.issuer, 'zkID demo issuer');
+  assert.equal(result.issuer, 'test fixture issuer');
   assert.equal(result.proofValid, true);
   assert.equal(result.bornOnOrBefore, '2008-09-28');
 });
 
 test('still accepted later: age only increases', { skip: needsVkey }, async () => {
-  assert.equal((await checkProofCode(code, { now: new Date('2031-01-01T00:00:00Z'), vkey })).accepted, true);
+  const later = await checkProofCode(code, { now: new Date('2031-01-01T00:00:00Z'), vkey, issuers: TEST_ISSUERS });
+  assert.equal(later.accepted, true);
 });
 
 test('policy: a valid proof with a too-lax cutoff is rejected', { skip: needsVkey }, async () => {
   // Checked the day before: the proof's cutoff is one day later than 18 years
   // ago, so it would admit someone who is still 17.
-  const result = await checkProofCode(code, { now: new Date('2026-09-27T12:00:00Z'), vkey });
+  const result = await checkProofCode(code, { now: new Date('2026-09-27T12:00:00Z'), vkey, issuers: TEST_ISSUERS });
   assert.equal(result.proofValid, true);
   assert.equal(result.ageOk, false);
   assert.equal(result.accepted, false);
@@ -79,10 +77,16 @@ test('policy: a valid proof from a non-allowlisted issuer is rejected', { skip: 
   assert.equal(result.accepted, false);
 });
 
+test('policy: the shipped trusted list rejects the test fixture', { skip: needsVkey }, async () => {
+  const result = await checkProofCode(code, { now: PROVED_ON, vkey });
+  assert.equal(result.issuer, null);
+  assert.equal(result.accepted, false);
+});
+
 test('a corrupted code is rejected', { skip: needsVkey }, async () => {
   const bytes = Buffer.from(code, 'base64url');
   bytes[bytes.length - 1] ^= 1;
-  const result = await checkProofCode(bytes.toString('base64url'), { now: PROVED_ON, vkey });
+  const result = await checkProofCode(bytes.toString('base64url'), { now: PROVED_ON, vkey, issuers: TEST_ISSUERS });
   assert.equal(result.proofValid, false);
   assert.equal(result.accepted, false);
 });

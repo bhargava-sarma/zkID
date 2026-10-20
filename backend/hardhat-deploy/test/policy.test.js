@@ -1,11 +1,12 @@
-// ZkIdPolicy on a local chain, with the real verifiers and honest proofs of the
-// mock issuer's sample credential (test/fixtures). The chain starts on
-// 2026-09-27 (hardhat.config.js); the age proof's cutoff is 20080928.
+// ZkIdPolicy on a local chain, with the real verifiers and honest proofs of a
+// synthetic credential under a discarded test key (test/fixtures, made by
+// tools/test-issuer/regenerate_v1_fixtures.js). The chain starts on 2026-09-27
+// (hardhat.config.js); the age proof's cutoff is 20080928.
 const { expect } = require('chai');
 const { ethers } = require('hardhat');
 const { time } = require('@nomicfoundation/hardhat-network-helpers');
 
-const ISSUER = require('../../../mock-issuer/circuit_inputs.json').modulus_limbs;
+const ISSUER = require('./fixtures/test-issuer.json').modulus_limbs;
 const fixture = (name) => require(`./fixtures/${name}.json`);
 const Result = { Accepted: 0n, UntrustedIssuer: 1n, CutoffTooLate: 2n, NothingClaimed: 3n, InvalidProof: 4n };
 

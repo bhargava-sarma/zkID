@@ -3,7 +3,7 @@
 // to the English text), cards that print only a year of birth, masked Aadhaar
 // (XXXX XXXX + last 4 digits), and e-Aadhaar letters that also print a VID.
 
-const { isCalendarDate } = require('../mock-issuer/sign_credential');
+const { isCalendarDate } = require('../tools/test-issuer/sign_credential');
 
 // Formats returned for the two card variants, shared with preprocessing and signing.
 const YEAR_ONLY_DOB = /^\d{4}$/; // the card prints only a year of birth

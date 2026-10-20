@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Builds input.json for CredentialAgeProof(119) from mock-issuer/circuit_inputs.json.
+// Builds input.json for CredentialAgeProof(119) from the test issuer's
+// tools/test-issuer/out/test_circuit_inputs.json (run its sign_credential.js first).
 //
 // Usage: node gen_input.js [--from <file>] [--out <file>] [--threshold <YYYYMMDD>] [--tamper=<mode>]
 // Tamper modes (negative controls):
@@ -10,7 +11,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const DEFAULT_SOURCE = path.join(__dirname, '..', '..', '..', 'mock-issuer', 'circuit_inputs.json');
+const DEFAULT_SOURCE = path.join(__dirname, '..', '..', '..', 'tools', 'test-issuer', 'out', 'test_circuit_inputs.json');
 const PATTERN = '"dob":"';
 const TAMPER_MODES = ['signature', 'date', 'modulus'];
 
@@ -26,7 +27,7 @@ function buildCircuitInput(ci, threshold, tamper = null) {
 
   const msg = [...ci.message_bytes];
   if (msg.length !== 119) {
-    throw new Error(`Expected a 119-byte payload, got ${msg.length}. Re-run sign_credential.js.`);
+    throw new Error(`Expected a 119-byte payload, got ${msg.length}. Re-run tools/test-issuer/sign_credential.js.`);
   }
 
   // Must agree with the circuit's own scan, which asserts exactly one match.

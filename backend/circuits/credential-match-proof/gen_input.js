@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Builds input.json for CredentialMatchProof(119, 49) from a signed credential's
-// circuit inputs (mock-issuer/circuit_inputs.json by default).
+// circuit inputs (tools/test-issuer/out/test_circuit_inputs.json by default).
 //
 // Usage: node gen_input.js [--from <file>] [--out <file>] [--name <claimed>] [--gender M|F|O] [--tamper=<mode>]
 // Tamper modes (negative controls):
@@ -11,7 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const { poseidon2 } = require('poseidon-lite/poseidon2');
 
-const DEFAULT_SOURCE = path.join(__dirname, '..', '..', '..', 'mock-issuer', 'circuit_inputs.json');
+const DEFAULT_SOURCE = path.join(__dirname, '..', '..', '..', 'tools', 'test-issuer', 'out', 'test_circuit_inputs.json');
 const NAME_KEY = '"name":"';
 const NAME_MAX = 49;
 const GENDER_CODES = { M: 1, F: 2, O: 3 };

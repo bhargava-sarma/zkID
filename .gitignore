@@ -5,6 +5,15 @@
 .env.hardhat
 !.env.example
 
+# Key material is never committed. Test keys are generated on demand
+# (tools/test-issuer/keys.js); see SECURITY_NOTES.md.
+*.pem
+*.key
+*.p12
+*.pfx
+tools/test-issuer/.keys/
+tools/test-issuer/out/
+
 node_modules/
 dist/
 build/

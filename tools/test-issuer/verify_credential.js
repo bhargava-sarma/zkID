@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Independently verifies signed_credential.json and circuit_inputs.json.
+// TEST ONLY. Independently verifies out/test_signed_credential.json and
+// out/test_circuit_inputs.json against the test key in .keys/.
 // Imports nothing from sign_credential.js on purpose: a format drift in the
 // signer must show up here, not be hidden by shared code.
 
@@ -7,9 +8,9 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-const CREDENTIAL_PATH = path.join(__dirname, 'signed_credential.json');
-const PUBLIC_KEY_PATH = path.join(__dirname, 'mock_issuer_public.pem');
-const CIRCUIT_INPUTS_PATH = path.join(__dirname, 'circuit_inputs.json');
+const CREDENTIAL_PATH = path.join(__dirname, 'out', 'test_signed_credential.json');
+const PUBLIC_KEY_PATH = path.join(__dirname, '.keys', 'test_issuer_public.pem');
+const CIRCUIT_INPUTS_PATH = path.join(__dirname, 'out', 'test_circuit_inputs.json');
 
 const REQUIRED_FIELDS = ['dob', 'gender', 'id_number', 'name'];
 
@@ -85,11 +86,11 @@ function rsaVerify(message, publicKey, signature) {
 
 function main() {
   for (const [label, filePath] of [
-    ['signed_credential.json', CREDENTIAL_PATH],
-    ['mock_issuer_public.pem', PUBLIC_KEY_PATH],
+    ['out/test_signed_credential.json', CREDENTIAL_PATH],
+    ['.keys/test_issuer_public.pem', PUBLIC_KEY_PATH],
   ]) {
     if (!fs.existsSync(filePath)) {
-      console.error(`[VERIFY] Missing ${label}. Run: node generate_keypair.js && node sign_credential.js`);
+      console.error(`[VERIFY] Missing ${label}. Run: node sign_credential.js`);
       process.exit(1);
     }
   }
@@ -98,7 +99,7 @@ function main() {
   const publicKey = crypto.createPublicKey(fs.readFileSync(PUBLIC_KEY_PATH, 'utf8'));
 
   console.log('='.repeat(72));
-  console.log('MOCK ISSUER CREDENTIAL - INDEPENDENT VERIFICATION');
+  console.log('TEST ISSUER CREDENTIAL (synthetic, test key) - INDEPENDENT VERIFICATION');
   console.log('='.repeat(72));
   console.log(`Credential: ${CREDENTIAL_PATH}`);
   console.log(`Public key: ${PUBLIC_KEY_PATH}`);
@@ -158,7 +159,7 @@ function main() {
   const signatureBytes = Buffer.from(credential.signature, 'hex');
   check(
     rsaVerify(reserializedBytes, publicKey, signatureBytes),
-    'RSASSA-PKCS1-v1_5 signature verifies against mock_issuer_public.pem',
+    'RSASSA-PKCS1-v1_5 signature verifies against .keys/test_issuer_public.pem',
     `${signatureBytes.length}-byte signature, ${publicKey.asymmetricKeyDetails.modulusLength}-bit key, ` +
       `e=${publicKey.asymmetricKeyDetails.publicExponent}`
   );
@@ -182,13 +183,13 @@ function main() {
   );
 
   console.log('');
-  console.log('CIRCUIT INPUT CHECKS (circuit_inputs.json)');
+  console.log('CIRCUIT INPUT CHECKS (out/test_circuit_inputs.json)');
   console.log('-'.repeat(72));
 
   if (!fs.existsSync(CIRCUIT_INPUTS_PATH)) {
     skip(
       'Limb decomposition checks',
-      'circuit_inputs.json not found - run sign_credential.js to generate it'
+      'out/test_circuit_inputs.json not found - run sign_credential.js to generate it'
     );
   } else {
     const ci = JSON.parse(fs.readFileSync(CIRCUIT_INPUTS_PATH, 'utf8'));
@@ -225,14 +226,14 @@ function main() {
     const modulusFromLimbs = fromLimbs(ci.modulus_limbs || [], EXPECTED_LIMB_BITS);
     check(
       modulusFromLimbs === modulusFromPem,
-      'Modulus limbs recombine to the modulus in mock_issuer_public.pem',
+      'Modulus limbs recombine to the modulus in .keys/test_issuer_public.pem',
       `${modulusFromPem.toString(16).length * 4}-bit modulus, reconstructed from ${EXPECTED_LIMB_COUNT} limbs`
     );
 
     const signatureFromLimbs = fromLimbs(ci.signature_limbs || [], EXPECTED_LIMB_BITS);
     check(
       signatureFromLimbs === BigInt('0x' + credential.signature),
-      'Signature limbs recombine to the signature in signed_credential.json',
+      'Signature limbs recombine to the signature in out/test_signed_credential.json',
       `${signatureBytes.length * 8}-bit signature, reconstructed from ${EXPECTED_LIMB_COUNT} limbs`
     );
 

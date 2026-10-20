@@ -1,8 +1,8 @@
 import addresses from "./addresses.json";
 
 // ZkIdPolicy checks every proof on-chain: trusted issuer, the age cutoff, then
-// the Groth16 verifier. Written by `npm run deploy:policy`; without it the app
-// hides the on-chain check.
+// the Groth16 verifier. None is deployed: v1's trusted a public key and is
+// retired (SECURITY_NOTES.md), so the app hides the on-chain check.
 export const POLICY_ADDRESS = addresses.ZkIdPolicy || null;
 export const hasPolicy = () => Boolean(POLICY_ADDRESS);
 

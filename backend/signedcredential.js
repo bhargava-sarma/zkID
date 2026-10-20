@@ -1,24 +1,24 @@
 // OCR fields -> canonical payload -> RSA signature -> composed-circuit inputs.
 // The raw 12-digit ID lives only in memory and in the signed bytes (a private
 // circuit input). It is never logged in full, written to disk, or stored.
+//
+// v1 server-side issuer, kept until the v2 holder app replaces it. It signs with
+// a TEST-ONLY key generated once per process. No verifier trusts that key, so
+// these credentials attest nothing (SECURITY_NOTES.md).
 
 const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
 
-const MOCK_ISSUER_DIR = path.join(__dirname, '..', 'mock-issuer');
-
-// Shared with the mock issuer so there is one implementation of the byte format.
+// Shared with the test issuer so there is one implementation of the byte format.
 const {
   validatePayload,
   serializePayload,
   padToFixedLength,
   signBytes,
   buildCircuitInputs,
-} = require('../mock-issuer/sign_credential');
+} = require('../tools/test-issuer/sign_credential');
+const { generateTestKeys } = require('../tools/test-issuer/keys');
 
-const PRIVATE_KEY_PATH = path.join(MOCK_ISSUER_DIR, 'mock_issuer_private.pem');
-const PUBLIC_KEY_PATH = path.join(MOCK_ISSUER_DIR, 'mock_issuer_public.pem');
+let testKeys = null;
 
 // `detail` is for server logs only: guard messages quote field contents.
 class CredentialError extends Error {
@@ -144,14 +144,12 @@ function signCredential(payload) {
     throw unprocessable('payload_too_long', err.message);
   }
 
-  let privateKey;
-  let publicKey;
   try {
-    privateKey = crypto.createPrivateKey(fs.readFileSync(PRIVATE_KEY_PATH, 'utf8'));
-    publicKey = crypto.createPublicKey(fs.readFileSync(PUBLIC_KEY_PATH, 'utf8'));
+    testKeys ??= generateTestKeys();
   } catch (err) {
-    throw unavailable('issuer_key_unavailable', `Could not load the issuer keys: ${err.message}`);
+    throw unavailable('issuer_key_unavailable', `Could not generate the test issuer key: ${err.message}`);
   }
+  const { privateKey, publicKey } = testKeys;
 
   const serializedBytes = Buffer.from(serialized, 'utf8');
   const sha256Hex = crypto.createHash('sha256').update(serializedBytes).digest('hex');

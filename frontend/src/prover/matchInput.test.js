@@ -7,8 +7,12 @@ import { buildMatchInput, nameHash, signedFields } from './matchInput.js';
 
 const require = createRequire(import.meta.url);
 const backend = require('../../../backend/circuits/credential-match-proof/gen_input.js');
-const credential = require('../../../mock-issuer/circuit_inputs.json');
+const { signPayload } = require('../../../tools/test-issuer/sign_credential.js');
+const { generateTestKeys } = require('../../../tools/test-issuer/keys.js');
 const nameFixture = require('../../../backend/hardhat-deploy/test/fixtures/match-name.json');
+
+// The synthetic credential, signed with a key that lives only in this process.
+const credential = signPayload(require('../../../tools/test-issuer/synthetic-payload.json'), generateTestKeys()).circuitInputs;
 
 test('name hash matches the backend and the proved fixture', () => {
   for (const name of ['Test User One', '  test   USER one ', 'A', 'Venkata Satya Narayana Murthy Chowdary Kondapalli']) {

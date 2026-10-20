@@ -1,6 +1,13 @@
 # zkID
 
-**Zero-Knowledge Proof Framework for Cross-Institutional KYC Compliance**
+> **Status: v2 overhaul in progress.** This README still describes v1, which is
+> preserved at tag `v1-mock-issuer-demo`. Several v1 claims did not hold and are
+> corrected below. Most importantly, v1's only trusted issuer key is public, so
+> the deployed Sepolia contracts and the live v1 verifier page accept forged
+> proofs. See [SECURITY_NOTES.md](SECURITY_NOTES.md). The README is rewritten
+> when the overhaul lands.
+
+**Zero-Knowledge Proof Framework for Cross-Institutional KYC Compliance** *(v1 title; it over-claims: v1 proves age, name or gender, has no relying-party protocol, and is not KYC)*
 
 Verify a customer once and let any institution check the result without seeing their personal data. zkID turns an identity document into zero-knowledge proofs of facts like *"over 18"*. The proofs are bound to an issuer's signature, and institutions can check them without ever seeing the underlying data.
 
@@ -10,14 +17,14 @@ Verify a customer once and let any institution check the result without seeing t
 
 ## Highlights
 
-- **Selective disclosure.** Prove age ≥ 18, a name match or a gender match. The verifier learns *yes*, never the date of birth, name or ID number.
+- **Selective disclosure.** Prove age ≥ 18, a name match or a gender match. *Correction:* only the age proof hides its attribute. A gender proof's public signals contain the gender, and a name proof's contain a hash of the name that can be checked against a list of names, so those proofs disclose the claim.
 - **Issuer-bound proofs.** Each circuit verifies an RSA-2048 signature *and* reads the date of birth, name or gender from the signed bytes, so a proof can only attest to what the issuer signed. Altering one byte breaks it.
-- **Prove on your own device.** The issuer only signs the credential. The holder's browser generates the proof in about 5 seconds, so no server ever sees the private inputs.
-- **Checked against a policy.** A valid proof alone doesn't say *who* signed. `ZkIdPolicy` on Ethereum Sepolia accepts a proof only from a trusted issuer and, for age, with today's 18-year cutoff. Checking is a free, read-only call that needs no wallet and no gas, and the app applies the same checks off-chain.
-- **Privacy by design.** Images are processed in memory and never written to disk. Only hashes and encoded values are stored, and raw ID numbers are never logged or persisted.
+- **Prove on your own device.** The holder's browser generates the proof in about 5 seconds. *Correction:* the v1 "issuer" is this project's own server, which sees the whole card image and returns the signed fields (including the ID number) to the browser, so the server does see the private inputs.
+- **Checked against a policy.** A valid proof alone doesn't say *who* signed. The app checks the issuer against a trusted list and, for age, today's 18-year cutoff. *Correction:* the list's only key was the public demo key; on this branch the list is empty, so no proof is accepted. The Sepolia `ZkIdPolicy` that made the same checks trusts the public key and is retired.
+- **Privacy by design.** *Correction:* images are processed in memory, but the legacy `/api/upload` and `/api/demo` store the plaintext name and an unsalted SHA-256 of the Aadhaar number, and the OCR and database modules log names.
 - **Strict validation.** Garbled or impossible dates (like 31 Feb) and missing fields are rejected before signing. Machine-readable error codes separate *retake the photo* from *not eligible*.
 - **Real Aadhaar card variants.** Reads bilingual cards (English and Hindi by default), masked Aadhaar and cards that print only a year of birth. A VID or an issue date is never mistaken for the Aadhaar number or the date of birth.
-- **Proof QR codes.** A signed proof can be shown as a QR code. Any phone camera opens the verifier page, which checks the proof in the browser against a trusted-issuer list and today's 18-year cutoff.
+- **Proof QR codes.** A signed proof can be shown as a QR code. Any phone camera opens the verifier page, which checks the proof in the browser against a trusted-issuer list (empty on this branch) and today's 18-year cutoff.
 
 ## How it works
 
@@ -48,6 +55,8 @@ Earlier versions had separate age, name and gender circuits that took their priv
 
 ## Relying-party policy
 
+*Retired on Sepolia: the deployed instance trusts the public demo key (SECURITY_NOTES.md). The contract is still compiled and tested locally.*
+
 [`ZkIdPolicy`](backend/hardhat-deploy/contracts/ZkIdPolicy.sol) wraps both verifiers:
 
 - `checkAge(proof, signals)` and `checkMatch(proof, signals)` return `Accepted`, `UntrustedIssuer`, `CutoffTooLate`, `NothingClaimed` or `InvalidProof`.
@@ -55,7 +64,7 @@ Earlier versions had separate age, name and gender circuits that took their priv
 - For age, the cutoff must be no later than 18 years before the block's UTC date, computed with the same integer arithmetic as the backend.
 - For name and gender, at least one claim must be set, and the caller compares the claims it needs with public signals 17 (name hash) and 18 (gender: 1 M, 2 F, 3 O).
 
-The app and the verifier page apply the same checks off-chain ([`frontend/src/verify/policy.js`](frontend/src/verify/policy.js)), against the issuers in [`trustedIssuers.js`](frontend/src/verify/trustedIssuers.js).
+The app and the verifier page apply the same checks off-chain ([`frontend/src/verify/policy.js`](frontend/src/verify/policy.js)), against the issuers in [`trustedIssuers.js`](frontend/src/verify/trustedIssuers.js), which is empty on this branch.
 
 ## Aadhaar card variants
 
@@ -73,7 +82,7 @@ OCR reads English and Hindi by default. Hindi lines otherwise come out as Latin 
 
 After an age proof, **Show as QR code** packs it into 270 bytes: format version, proof type, an 8-byte issuer key ID, the cutoff date and the Groth16 proof. The QR code opens `/#/verify?p=…`, and a URL fragment never reaches a server. The verifier page (also under **Verify a proof**) scans with the camera or reads an uploaded image, and accepts only if:
 
-1. the issuer key ID is in [`frontend/src/verify/trustedIssuers.js`](frontend/src/verify/trustedIssuers.js), the relying party's list,
+1. the issuer key ID is in [`frontend/src/verify/trustedIssuers.js`](frontend/src/verify/trustedIssuers.js), the relying party's list (empty on this branch, so nothing is accepted),
 2. the proof verifies under that issuer's key, and
 3. the cutoff date is no later than today's 18-year cutoff. An earlier cutoff is only stricter.
 
@@ -87,7 +96,7 @@ cd backend  && npm install && npm run fetch-circuit && npm run dev   # API on :3
 cd frontend && npm install && npm run dev                            # UI on :5173
 ```
 
-Open `http://localhost:5173`, upload an Aadhaar image or pick a demo scenario, then generate an issuer-signed proof in the **Prove** step.
+Open `http://localhost:5173`, upload an Aadhaar image or pick a demo scenario, then generate an issuer-signed proof in the **Prove** step. On this branch the server signs with a throwaway test key (`tools/test-issuer`), so the policy check reports an untrusted issuer.
 
 `npm run fetch-circuit` downloads both circuits' proving keys, wasm and verification keys (~270 MB) from the [`circuit-v1`](https://github.com/bhargava-sarma/zkID/releases/tag/circuit-v1) and [`circuit-match-v1`](https://github.com/bhargava-sarma/zkID/releases/tag/circuit-match-v1) releases and checks each file's SHA-256. These are the exact files the deployed verifiers were built from.
 
@@ -151,8 +160,8 @@ The match circuit works the same way in `backend/circuits/credential-match-proof
 <summary><b>Issuer and tamper tests</b></summary>
 
 ```bash
-cd mock-issuer
-node sign_credential.js      # sign payload.json with the demo issuer key
+cd tools/test-issuer
+node sign_credential.js      # sign synthetic-payload.json with a local TEST key (created on first use, gitignored)
 node verify_credential.js    # 12 independent checks, including tamper controls
 
 cd ../backend/circuits/credential-age-proof
@@ -177,8 +186,11 @@ Signed payload: four ASCII fields, sorted keys, no whitespace, space-padded to 1
 ```bash
 cd backend                && npm test   # OCR, card variants, signing, both circuits (after npm run fetch-circuit)
 cd backend/hardhat-deploy && npm test   # ZkIdPolicy on a local chain with the real verifiers
-cd frontend               && npm test   # QR codes, verifier policy, browser match input
+cd frontend               && npm test   # QR codes, verifier policy, trusted-issuer guard, browser match input
+node --test "tools/repo-checks/*.test.mjs"   # no private key is tracked
 ```
+
+The proof fixtures are made under a key that existed only while `tools/test-issuer/regenerate_v1_fixtures.js` ran.
 </details>
 
 ## API
@@ -203,22 +215,17 @@ One Vercel project runs two services, defined in [`vercel.json`](vercel.json): t
 
 On Vercel, proofs run in the visitor's browser, because server-side proving needs about 3 GB of RAM. The build downloads both proving keys from the releases and serves them as static files in 20 MB parts. Uploads are limited to 4 MB.
 
-## On-chain contracts · Ethereum Sepolia
+## On-chain contracts · Ethereum Sepolia (RETIRED)
+
+**Do not use.** `ZkIdPolicy` trusts the v1 demo issuer key, whose private key is public, and returns `Accepted` for forged proofs; this was checked read-only on 2026-10-20 ([SECURITY_NOTES.md](SECURITY_NOTES.md), [`tools/v1-audit`](tools/v1-audit)). The verifiers accept proofs under any issuer key.
 
 | Contract | Role | Address |
 |---|---|---|
-| `ZkIdPolicy` | Relying-party policy over both verifiers; what the app calls | [`0x8eDa6b1A54900c60C6b730796FfDd51a5327714f`](https://sepolia.etherscan.io/address/0x8eDa6b1A54900c60C6b730796FfDd51a5327714f) |
-| `CredentialAgeVerifier` | Age proof (18 public signals) | [`0x1052Fc75ce491137D4FA7691b427D5356505b1cd`](https://sepolia.etherscan.io/address/0x1052Fc75ce491137D4FA7691b427D5356505b1cd) |
-| `CredentialMatchVerifier` | Name and gender proof (19 public signals) | [`0x7bD0f448459f1Eb3F80113df712F2f71DD0B7641`](https://sepolia.etherscan.io/address/0x7bD0f448459f1Eb3F80113df712F2f71DD0B7641) |
+| `ZkIdPolicy` | Relying-party policy over both verifiers (retired) | [`0x8eDa6b1A54900c60C6b730796FfDd51a5327714f`](https://sepolia.etherscan.io/address/0x8eDa6b1A54900c60C6b730796FfDd51a5327714f) |
+| `CredentialAgeVerifier` | Age proof, 18 public signals (retired) | [`0x1052Fc75ce491137D4FA7691b427D5356505b1cd`](https://sepolia.etherscan.io/address/0x1052Fc75ce491137D4FA7691b427D5356505b1cd) |
+| `CredentialMatchVerifier` | Name and gender proof, 19 public signals (retired) | [`0x7bD0f448459f1Eb3F80113df712F2f71DD0B7641`](https://sepolia.etherscan.io/address/0x7bD0f448459f1Eb3F80113df712F2f71DD0B7641) |
 
-The UI reads addresses from [`frontend/src/contracts/addresses.json`](frontend/src/contracts/addresses.json), where the removed circuits' verifiers are listed under `retired`. Source code is verified on Etherscan (see the links above) and on Sourcify (exact match). After a redeploy, `npm run verify` publishes to both; Etherscan needs `ETHERSCAN_API_KEY` in `.env.hardhat`.
-
-Deploy with Sepolia ETH (free from the [Google Cloud faucet](https://cloud.google.com/application/web3/faucet/ethereum/sepolia)) and `PRIVATE_KEY` set in `backend/hardhat-deploy/.env.hardhat`. Each deploy writes its address to `addresses.json`:
-
-```bash
-cd backend/hardhat-deploy
-npm run deploy:all           # or one: deploy:credential, deploy:match, deploy:policy (after both verifiers)
-```
+All of them are listed under `retired` in [`frontend/src/contracts/addresses.json`](frontend/src/contracts/addresses.json), so the app no longer calls them. `npm run deploy:policy` refuses to run, because v1 has no trustworthy issuer to deploy with.
 
 ## Project structure
 
@@ -232,7 +239,9 @@ frontend/                         React UI: upload → preprocess → store → 
   src/prover/                     In-browser prover (Web Worker) and match input builder
   src/verify/                     Policy checks, trusted issuers, proof QR codes
   scripts/prepare-circuit.mjs     Stages circuit files in public/circuit/ before dev and build
-mock-issuer/                      RSA-2048 issuer: keygen, signing, independent verifier
+tools/test-issuer/                TEST-ONLY RSA-2048 issuer: ephemeral keys, signing, independent verifier
+tools/v1-audit/                   Read-only checks against the retired Sepolia contracts
+security/compromised-keys.json    Keys whose private half is public; never trust them
 ```
 
 **Stack:** circom 2 · snarkjs (Groth16, BN128) · Node.js / Express · Tesseract.js · Supabase · React / Vite · ethers.js · node-qrcode · jsQR · poseidon-lite · Hardhat · Ethereum Sepolia

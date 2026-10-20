@@ -82,7 +82,7 @@ module.exports = async function verifyVerifiers(hre) {
   const apikey = process.env.ETHERSCAN_API_KEY;
   let failed = false;
   for (const [contract, address] of Object.entries(ADDRESSES)) {
-    if (contract === "retired" || typeof address !== "string") continue;
+    if (contract.startsWith("retired") || typeof address !== "string") continue;
     const fqn = `contracts/${contract}.sol:${contract}`;
     const buildInfo = await hre.artifacts.getBuildInfo(fqn);
     const targets = [["Sourcify", () => sourcify(chainId, address, fqn, buildInfo)]];

@@ -6,7 +6,7 @@ task("deploy-verifier", "Deploy one Groth16 verifier contract")
   .addParam("contract", "CredentialAgeVerifier | CredentialMatchVerifier")
   .setAction(async ({ contract }, hre) => require("./scripts/deploy-verifier").deployContract(hre, contract));
 
-task("deploy-policy", "Deploy ZkIdPolicy over the deployed verifiers, trusting the mock issuer")
+task("deploy-policy", "Retired: refuses to deploy (SECURITY_NOTES.md)")
   .setAction(async (_, hre) => require("./scripts/deploy-verifier").deployPolicy(hre));
 
 task("verify-verifiers", "Publish verifier source to Sourcify (and Etherscan with ETHERSCAN_API_KEY)")

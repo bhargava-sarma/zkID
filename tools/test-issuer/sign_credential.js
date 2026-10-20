@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Signs payload.json with the mock issuer key.
-// Writes signed_credential.json and circuit_inputs.json. Also used by the backend.
+// TEST ONLY. Signs synthetic-payload.json with the test issuer key (keys.js).
+// Writes out/test_signed_credential.json and out/test_circuit_inputs.json
+// (gitignored). Also used by the v1 backend and by tests.
 
 const crypto = require('crypto');
 const fs = require('fs');
@@ -16,11 +17,13 @@ const PAD_CHAR = ' ';
 const LIMB_BITS = 121;
 const LIMB_COUNT = 17;
 
-const PAYLOAD_PATH = path.join(__dirname, 'payload.json');
-const PRIVATE_KEY_PATH = path.join(__dirname, 'mock_issuer_private.pem');
-const PUBLIC_KEY_PATH = path.join(__dirname, 'mock_issuer_public.pem');
-const CREDENTIAL_PATH = path.join(__dirname, 'signed_credential.json');
-const CIRCUIT_INPUTS_PATH = path.join(__dirname, 'circuit_inputs.json');
+const { loadOrCreateTestKeys, KEY_DIR } = require('./keys');
+
+const PAYLOAD_PATH = path.join(__dirname, 'synthetic-payload.json');
+const OUT_DIR = path.join(__dirname, 'out');
+const CREDENTIAL_PATH = path.join(OUT_DIR, 'test_signed_credential.json');
+const CIRCUIT_INPUTS_PATH = path.join(OUT_DIR, 'test_circuit_inputs.json');
+const TEST_ONLY_NOTE = 'TEST ONLY: synthetic data signed with an ephemeral test key. Proves nothing.';
 
 // Gregorian calendar, including leap years.
 function isCalendarDate(year, month, day) {
@@ -173,6 +176,23 @@ function buildCircuitInputs(canonical, serializedBytes, signature, publicKey) {
   };
 }
 
+// Validate, serialize, pad and sign a payload with { privateKey, publicKey }.
+function signPayload(payload, { privateKey, publicKey }) {
+  validatePayload(payload);
+  const canonical = serializePayload(payload);
+  const serialized = padToFixedLength(canonical);
+  const serializedBytes = Buffer.from(serialized, 'utf8');
+  const sha256 = crypto.createHash('sha256').update(serializedBytes).digest('hex');
+  const signature = signBytes(serializedBytes, privateKey);
+  return {
+    canonical,
+    serialized,
+    sha256,
+    signature: signature.toString('hex'),
+    circuitInputs: buildCircuitInputs(canonical, serializedBytes, signature, publicKey),
+  };
+}
+
 // Temp file + rename, so a reader never sees a half-written file.
 function writeAtomic(filePath, contents) {
   const tmpPath = `${filePath}.tmp`;
@@ -181,53 +201,31 @@ function writeAtomic(filePath, contents) {
 }
 
 function main() {
-  for (const [label, filePath] of [
-    ['payload.json', PAYLOAD_PATH],
-    ['mock_issuer_private.pem', PRIVATE_KEY_PATH],
-    ['mock_issuer_public.pem', PUBLIC_KEY_PATH],
-  ]) {
-    if (!fs.existsSync(filePath)) {
-      console.error(`[SIGN] Missing ${label}. Run: node generate_keypair.js`);
-      process.exit(1);
-    }
-  }
-
   const payload = JSON.parse(fs.readFileSync(PAYLOAD_PATH, 'utf8'));
-  validatePayload(payload);
+  const keys = loadOrCreateTestKeys();
+  console.log(`[SIGN] TEST-ONLY key from ${path.relative(process.cwd(), KEY_DIR)}/`);
+
+  // Builds both documents before writing either, so they can't diverge.
+  const signed = signPayload(payload, keys);
+  const canonicalLength = Buffer.byteLength(signed.canonical, 'utf8');
+  const byteLength = Buffer.byteLength(signed.serialized, 'utf8');
   console.log('[SIGN] Payload validated: 4 fields, printable ASCII, no escape sequences');
-
-  const canonical = serializePayload(payload);
-  const serialized = padToFixedLength(canonical);
-  const serializedBytes = Buffer.from(serialized, 'utf8');
-  const canonicalLength = Buffer.byteLength(canonical, 'utf8');
   console.log(`[SIGN] Canonical: ${canonicalLength} bytes`);
-  console.log(`[SIGN] ${canonical}`);
-  console.log(
-    `[SIGN] Padded:    ${serializedBytes.length} bytes / ${serializedBytes.length * 8} bits ` +
-      `(+${PAYLOAD_FIXED_BYTES - canonicalLength} x 0x20)`
-  );
+  console.log(`[SIGN] ${signed.canonical}`);
+  console.log(`[SIGN] Padded:    ${byteLength} bytes / ${byteLength * 8} bits (+${PAYLOAD_FIXED_BYTES - canonicalLength} x 0x20)`);
+  console.log(`[SIGN] SHA-256: ${signed.sha256}`);
+  console.log(`[SIGN] Signature: ${signed.signature.length / 2} bytes (${signed.signature.substring(0, 32)}...)`);
 
-  const sha256Hex = crypto.createHash('sha256').update(serializedBytes).digest('hex');
-  console.log(`[SIGN] SHA-256: ${sha256Hex}`);
-
-  const privateKey = crypto.createPrivateKey(fs.readFileSync(PRIVATE_KEY_PATH, 'utf8'));
-  const publicKey = crypto.createPublicKey(fs.readFileSync(PUBLIC_KEY_PATH, 'utf8'));
-  const signature = signBytes(serializedBytes, privateKey);
-  const signatureHex = signature.toString('hex');
-  console.log(`[SIGN] Signature: ${signature.length} bytes (${signatureHex.substring(0, 32)}...)`);
-
-  // Build both documents before writing either, so they can't diverge.
-  const credential = { payload, serialized, sha256: sha256Hex, signature: signatureHex };
-  const circuitInputs = buildCircuitInputs(canonical, serializedBytes, signature, publicKey);
-
+  const credential = { test_only: TEST_ONLY_NOTE, payload, serialized: signed.serialized, sha256: signed.sha256, signature: signed.signature };
+  fs.mkdirSync(OUT_DIR, { recursive: true });
   writeAtomic(CREDENTIAL_PATH, JSON.stringify(credential, null, 2) + '\n');
-  console.log(`[SIGN] Wrote ${path.basename(CREDENTIAL_PATH)}`);
-  writeAtomic(CIRCUIT_INPUTS_PATH, JSON.stringify(circuitInputs, null, 2) + '\n');
-  console.log(`[SIGN] Wrote ${path.basename(CIRCUIT_INPUTS_PATH)}`);
+  console.log(`[SIGN] Wrote ${path.relative(process.cwd(), CREDENTIAL_PATH)}`);
+  writeAtomic(CIRCUIT_INPUTS_PATH, JSON.stringify({ test_only: TEST_ONLY_NOTE, ...signed.circuitInputs }, null, 2) + '\n');
+  console.log(`[SIGN] Wrote ${path.relative(process.cwd(), CIRCUIT_INPUTS_PATH)}`);
 
   console.log(
-    `[SIGN] Circuit sizing: ${circuitInputs.payload_bit_length} message bits, ` +
-      `${circuitInputs.sha256_block_count} SHA-256 block(s)`
+    `[SIGN] Circuit sizing: ${signed.circuitInputs.payload_bit_length} message bits, ` +
+      `${signed.circuitInputs.sha256_block_count} SHA-256 block(s)`
   );
   console.log('[SIGN] Next: node verify_credential.js');
 }
@@ -248,5 +246,7 @@ module.exports = {
   padToFixedLength,
   signBytes,
   buildCircuitInputs,
+  signPayload,
   PAYLOAD_FIXED_BYTES,
+  CIRCUIT_INPUTS_PATH,
 };
