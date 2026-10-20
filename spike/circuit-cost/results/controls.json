@@ -1,0 +1,77 @@
+{
+  "when": "2026-10-20T18:24:46.557Z",
+  "results": [
+    {
+      "check": "valid synthetic code",
+      "result": "accepted; ageAbove18=1",
+      "expected": "accepted; ageAbove18=1",
+      "ok": true
+    },
+    {
+      "check": "one DOB byte changed",
+      "result": "rejected (RSAVerifier65537_121)",
+      "expected": "rejected",
+      "ok": true
+    },
+    {
+      "check": "one photo byte changed",
+      "result": "rejected (RSAVerifier65537_121)",
+      "expected": "rejected",
+      "ok": true
+    },
+    {
+      "check": "one signature limb bit changed",
+      "result": "rejected (RSAVerifier65537_121)",
+      "expected": "rejected",
+      "ok": true
+    },
+    {
+      "check": "signature checked under a different key",
+      "result": "rejected (RSAVerifier65537_121)",
+      "expected": "rejected",
+      "ok": true
+    },
+    {
+      "check": "DOB delimiter hint off by one",
+      "result": "rejected (AgeExtractor_217)",
+      "expected": "rejected",
+      "ok": true
+    },
+    {
+      "check": "holder under 18 at QR time",
+      "result": "accepted; ageAbove18=0",
+      "expected": "accepted; ageAbove18=0",
+      "ok": true
+    },
+    {
+      "check": "adult with revealAgeAbove18=0",
+      "result": "accepted; ageAbove18=0",
+      "expected": "accepted; ageAbove18=0",
+      "ok": true
+    },
+    {
+      "check": "re-download, same seed: nullifier",
+      "result": "equal",
+      "expected": "equal",
+      "ok": true
+    },
+    {
+      "check": "re-download: timestamp output",
+      "result": "different",
+      "expected": "different",
+      "ok": true
+    },
+    {
+      "check": "other verifier seed: nullifier",
+      "result": "different",
+      "expected": "different",
+      "ok": true
+    },
+    {
+      "check": "timestamp is the generation hour (IST)",
+      "result": "yes",
+      "expected": "yes",
+      "ok": true
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "note": "UIDAI Secure QR signing certificates known to this spike. Public certificates, not secrets. Not yet cross-checked against uidai.gov.in, which was unreachable from the build environment (connection reset, HTTP 503). Not a production trust list: Phase 4 builds that.",
+  "retrieved": "2026-10-20",
+  "certificates": [
+    {
+      "file": "uidai-ds-4_2017-2020.crt",
+      "subject_cn": "DS UNIQUE IDENTIFICATION AUTHORITY OF INDIA 4",
+      "issuer_cn": "e-Mudhra Sub CA Class 3 for Document Signer 2014",
+      "serial": "D6C8D0",
+      "not_before": "2017-06-08T10:46:26.000Z",
+      "not_after": "2020-06-07T10:46:26.000Z",
+      "key": "rsa-2048 e=65537",
+      "cert_sha256": "fcf31a3f89211615ebd5d449ac33d8d381f654d2e2d15037d5cc8d4aeb72f836",
+      "spki_sha256": "7eec85303e0d63ef8811736e4ff15c3e53c357a4e244bf2b6e6fe5bc28e8789f",
+      "source": "anon-aadhaar/anon-aadhaar@4dad918761cfb1d7d5ed9918dcd796d0cb23ae82:packages/circuits/assets/uidai_prod_cdup.cer",
+      "uidai_name": "uidai_prod_cdup.cer",
+      "evidence": "UIDAI's official sample Secure QR (V1) verifies against this key (spike/secure-qr test)."
+    },
+    {
+      "file": "uidai-ds-05_2021-2024.crt",
+      "subject_cn": "DS UNIQUE IDENTIFICATION AUTHORITY OF INDIA 05",
+      "issuer_cn": "(n)Code Solutions CA 2014",
+      "serial": "53995A33",
+      "not_before": "2021-02-26T11:54:24.000Z",
+      "not_after": "2024-02-27T00:27:11.000Z",
+      "key": "rsa-2048 e=65537",
+      "cert_sha256": "e0f0f869d32efc7e80fae2223717a56dcf8b616f820b542a49e5bd5abf1c0f7d",
+      "spki_sha256": "e16ab47e49c6144a4b54b53fa2d02fd3e8dc10e7cb323199b149835374bf4125",
+      "source": "anon-aadhaar/anon-aadhaar@4dad918761cfb1d7d5ed9918dcd796d0cb23ae82:packages/circuits/assets/uidai_offline_publickey_26022021.cer (identical copy in packages/react/src/publicKeys.ts)",
+      "uidai_name": "uidai_offline_publickey_26022021.cer",
+      "evidence": "Anon Aadhaar uses it for production QR codes; its code cites https://www.uidai.gov.in/images/authDoc/uidai_offline_publickey_26022021.cer. Not checked against a real QR here."
+    },
+    {
+      "file": "uidai-ds-05_2024-2026.crt",
+      "subject_cn": "DS Unique Identification Authority of India 05",
+      "issuer_cn": "(n)Code Solutions Sub-CA for DSC 2022",
+      "serial": "624961F5",
+      "not_before": "2024-02-21T12:23:19.000Z",
+      "not_after": "2026-02-16T22:27:40.000Z",
+      "key": "rsa-2048 e=65537",
+      "cert_sha256": "00573c692cf04fbee113ae5fd52f2a654d361bf8ee4d06c46008906b36df8169",
+      "spki_sha256": "91ddf442fcce4ff0fedce529e101e9ce0d7ebbb6f046246c265fce2c6a6f48ba",
+      "source": "anon-aadhaar/anon-aadhaar@4dad918761cfb1d7d5ed9918dcd796d0cb23ae82:packages/react/src/publicKeys.ts (uidai_offline_publickey_17022026)",
+      "uidai_name": "uidai_offline_publickey_17022026 (name as used by Anon Aadhaar)",
+      "evidence": "Anon Aadhaar's React SDK accepts it alongside the 2021 key. Not checked against a real QR here."
+    }
+  ]
+}

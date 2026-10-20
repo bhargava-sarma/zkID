@@ -1,0 +1,20 @@
+{
+  "circuit": "zkID v1 CredentialAgeProof(119)",
+  "runs": [
+    {
+      "witnessMs": 1418,
+      "proveMs": 8385
+    },
+    {
+      "witnessMs": 1378,
+      "proveMs": 8314
+    },
+    {
+      "witnessMs": 1474,
+      "proveMs": 7950
+    }
+  ],
+  "medianWitnessMs": 1418,
+  "medianProveMs": 8314,
+  "peakRssMB": 1262
+}

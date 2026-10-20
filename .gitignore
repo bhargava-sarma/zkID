@@ -14,6 +14,9 @@
 tools/test-issuer/.keys/
 tools/test-issuer/out/
 
+# Real or sample Secure QR codes hold personal data: local only, never committed.
+spike/secure-qr/local/
+
 node_modules/
 dist/
 build/
