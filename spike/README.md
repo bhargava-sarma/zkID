@@ -5,15 +5,19 @@ findings are in [docs/issuer-research.md](../docs/issuer-research.md).
 
 ## secure-qr: parse and verify Aadhaar Secure QR codes in plain Node
 
-No dependencies (`node:zlib`, `node:crypto`).
-
 ```bash
 cd spike/secure-qr
+npm install
 npm run fetch-uidai-sample   # UIDAI's official V1 sample -> local/ (gitignored)
 npm test                     # synthetic V2 codes, negative controls, UIDAI sample
 node verify-qr.mjs local/uidai-official-sample-v1.txt
+node read-qr-image.mjs local/qr-a.png local/a.txt    # a QR screenshot -> its text
 node compare-downloads.mjs local/a.txt local/b.txt   # Phase 1.3, on two real downloads
 ```
+
+The parser has no dependencies (`node:zlib`, `node:crypto`).
+`read-qr-image.mjs` reads PNG or JPEG images with jsqr, pngjs and jpeg-js. It
+runs locally and never prints what the code contains.
 
 - `secure-qr.mjs` decodes, parses and verifies a code. Every failure throws an
   error with a code.
