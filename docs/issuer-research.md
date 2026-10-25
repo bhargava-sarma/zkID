@@ -162,7 +162,22 @@ indirect evidence only.
 | `uidai-ds-05_2024-2026` | DS Unique Identification Authority of India 05 | (n)Code Solutions Sub-CA for DSC 2022 | 2024-02-21 → 2026-02-16 | `91ddf442fcce4ff0` | Anon Aadhaar's SDK accepts it [S] |
 
 Files, fingerprints and provenance: `spike/secure-qr/certs/registry.json`. None
-of the three was cross-checked against uidai.gov.in.
+of the three was cross-checked against uidai.gov.in. A second, independent
+project, `itxshakil/aadhaar-offline` (docs/installation.md at `dc20742`,
+2026-10-10), lists the same SHA-256 fingerprints for the 2021 and 2024
+certificates [S].
+
+That project also lists the **current** certificate [S, not yet obtained here]:
+
+- file `uidai_offline_publickey_2026.cer`;
+- subject "DS Unique Identification Authority of India 06", expiring 2029-02-03;
+- SHA-256 `E0:30:4B:9E:61:EE:36:40:EC:DD:AE:2D:B4:B6:17:F2:E2:67:8F:57:DB:C2:82:6C:2F:86:AC:5C:04:F2:77:DF`;
+- download link
+  `https://backend.uidai.gov.in/get/files/media/document/2026-07/uidai_offline_publickey_2026.cer`,
+  which also resets connections from this environment.
+
+By name it is the "offline" key, which UIDAI uses for both the Paperless
+Offline e-KYC XML and Secure QR.
 
 Consequences for the design:
 
@@ -480,10 +495,11 @@ and the docs must say prominently that no real credential is verified.
 
 ## 10. Open items for the owner
 
-1. **Certificate.** From an Indian network, download the current Secure QR
-   certificate(s) from UIDAI's QR code reader page
-   (`https://uidai.gov.in/en/ecosystem/authentication-devices-documents/qr-code-reader.html`)
-   or the `images/authDoc/` path Anon Aadhaar cites. Public, safe to commit.
+1. **Certificate.** From an Indian network, download
+   `uidai_offline_publickey_2026.cer` (link in section 4; UIDAI lists it on its
+   "UIDAI Certificate Details" page in the developer section). Check that
+   `verify-qr.mjs --cert` prints the fingerprint given in section 4. Public,
+   safe to commit.
 2. **Your QR codes.** Download your e-Aadhaar twice, on different days.
    Screenshot each QR into `spike/secure-qr/local/` (gitignored), then run:
    ```bash

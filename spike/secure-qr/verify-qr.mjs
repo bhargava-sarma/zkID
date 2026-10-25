@@ -21,6 +21,13 @@ const extra = args
   .flatMap((a, i) => (a === '--cert' ? [args[i + 1]] : []))
   .map((p) => ({ label: p, cert: new crypto.X509Certificate(fs.readFileSync(p)) }));
 
+// Printed so the owner can compare a downloaded certificate with UIDAI's listing.
+for (const { label, cert } of extra) {
+  const cn = cert.subject.split('\n').find((l) => l.startsWith('CN='))?.slice(3);
+  console.log(`--cert        ${label}: "${cn}", valid ${cert.validFrom} to ${cert.validTo}`);
+  console.log(`              sha256 fingerprint ${cert.fingerprint256}`);
+}
+
 const text = fs.readFileSync(file === '-' ? 0 : file, 'utf8');
 const qr = decodeSecureQr(text);
 const certs = [...loadUidaiCerts(), ...extra];
