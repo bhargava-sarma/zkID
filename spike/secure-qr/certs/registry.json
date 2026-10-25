@@ -1,6 +1,6 @@
 {
-  "note": "UIDAI Secure QR signing certificates known to this spike. Public certificates, not secrets. Not yet cross-checked against uidai.gov.in, which was unreachable from the build environment (connection reset, HTTP 503). Not a production trust list: Phase 4 builds that.",
-  "retrieved": "2026-10-20",
+  "note": "UIDAI Secure QR signing certificates known to this spike. Public certificates, not secrets. uidai.gov.in was unreachable from the build environment; the 2026 certificate was downloaded from UIDAI by the owner. Not a production trust list: Phase 4 builds that.",
+  "retrieved": "2026-10-20 (first three), 2026-10-25 (2026 certificate)",
   "certificates": [
     {
       "file": "uidai-ds-4_2017-2020.crt",
@@ -43,6 +43,20 @@
       "source": "anon-aadhaar/anon-aadhaar@4dad918761cfb1d7d5ed9918dcd796d0cb23ae82:packages/react/src/publicKeys.ts (uidai_offline_publickey_17022026)",
       "uidai_name": "uidai_offline_publickey_17022026 (name as used by Anon Aadhaar)",
       "evidence": "Anon Aadhaar's React SDK accepts it alongside the 2021 key. Not checked against a real QR here."
+    },
+    {
+      "file": "uidai-ds-06_2026-2029.crt",
+      "subject_cn": "DS Unique Identification Authority of India 06",
+      "issuer_cn": "(n)Code Solutions Sub-CA for DSC 2022",
+      "serial": "624C4F50",
+      "not_before": "2026-02-03T09:56:12.000Z",
+      "not_after": "2029-02-03T17:28:36.000Z",
+      "key": "rsa-2048 e=65537",
+      "cert_sha256": "e0304b9e61ee3640ecddae2db4b617f2e2678f57dbc2826c2f86ac5c04f277df",
+      "spki_sha256": "5e74a86a0ce6ff94ce3ac0d6acf8489906bcaada00e1a412bf737190919bcab1",
+      "source": "Downloaded by the repository owner from UIDAI on 2026-10-25 and pasted into the session. UIDAI link, per itxshakil/aadhaar-offline docs/installation.md (dc20742): https://backend.uidai.gov.in/get/files/media/document/2026-07/uidai_offline_publickey_2026.cer",
+      "uidai_name": "uidai_offline_publickey_2026.cer",
+      "evidence": "The owner's own e-Aadhaar Secure QR (format V5, downloaded 2026-10-25) verifies under it, and one-bit changes are rejected. Fingerprint also matches the one listed in itxshakil/aadhaar-offline docs/installation.md (dc20742)."
     }
   ]
 }

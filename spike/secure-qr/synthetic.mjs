@@ -1,4 +1,4 @@
-// SYNTHETIC Secure QR in the V2 layout, signed with a caller-supplied TEST key.
+// SYNTHETIC Secure QR in the V2 or V5 layout, signed with a caller-supplied TEST key.
 // Format-faithful in structure and sizes (see secure-qr.mjs); every value is
 // fake and labelled as such. It never verifies against a UIDAI certificate.
 
@@ -38,8 +38,16 @@ export function syntheticFields({ generatedAt = new Date(), ...overrides } = {})
     subDistrict: 'TEST SUBDISTRICT',
     vtc: 'TEST VTC',
     mobileLast4: '0000',
+    mobile: 'xxxxxx0000',
     ...overrides,
   };
+}
+
+// Stand-in for the bytes a real V5 code carries after its photo. Their content
+// is unknown, so these are random; 0xFF is avoided so they cannot look like the
+// photo's end marker.
+export function unknownTrailer(length = 27) {
+  return Buffer.from(crypto.randomBytes(length).map((b) => (b === 0xff ? 0xfe : b)));
 }
 
 export function buildSignedData({ version = 'V2', fields = syntheticFields(), photo = syntheticPhoto(), trailing = Buffer.alloc(0) } = {}) {

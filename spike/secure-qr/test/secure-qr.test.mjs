@@ -13,7 +13,7 @@ import {
   parseReferenceId,
   verifySignature,
 } from '../secure-qr.mjs';
-import { buildSignedData, makeSyntheticSecureQr, signAndEncode, syntheticFields, syntheticPhoto } from '../synthetic.mjs';
+import { buildSignedData, makeSyntheticSecureQr, signAndEncode, syntheticFields, syntheticPhoto, unknownTrailer } from '../synthetic.mjs';
 import { loadUidaiCerts } from '../certs.mjs';
 
 const keys = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -30,10 +30,21 @@ test('a synthetic V2 QR parses into the fields it was built from', () => {
   const qr = decodeSecureQr(makeSyntheticSecureQr(keys.privateKey, { fields }).text);
   assert.equal(qr.version, 'V2');
   assert.equal(qr.compression, 'gzip');
-  for (const [name, value] of Object.entries(fields)) assert.equal(qr.fields[name].toString('utf8'), value, name);
+  assert.equal(Object.keys(qr.fields).length, 17);
+  for (const name of Object.keys(qr.fields)) assert.equal(qr.fields[name].toString('utf8'), fields[name], name);
   assert.equal(qr.photo.length, 888);
   assert.equal(qr.trailingBytes, 0);
   assert.deepEqual(parseReferenceId(qr.fields.referenceId), { aadhaarLast4: '0000', generatedAt });
+  assert.equal(verifySignature(qr.signedData, qr.signature, keys.publicKey), true);
+});
+
+test('a synthetic V5 code with the measured shape parses: 17 fields, photo, 27 bytes after', () => {
+  const photo = syntheticPhoto(900);
+  const qr = decodeSecureQr(makeSyntheticSecureQr(keys.privateKey, { version: 'V5', photo, trailing: unknownTrailer() }).text);
+  assert.equal(qr.version, 'V5');
+  assert.equal(qr.fields.mobile.toString(), 'xxxxxx0000');
+  assert.equal(qr.fields.mobileLast4, undefined);
+  assert.deepEqual([qr.photo.length, qr.trailingBytes], [900, 27]);
   assert.equal(verifySignature(qr.signedData, qr.signature, keys.publicKey), true);
 });
 
@@ -64,7 +75,7 @@ test('negative control: a changed signature, or the wrong key, is rejected', () 
 
 test('negative control: a synthetic QR never verifies against a UIDAI certificate', () => {
   const qr = decodeSecureQr(makeSyntheticSecureQr(keys.privateKey).text);
-  assert.equal(UIDAI.length, 3);
+  assert.equal(UIDAI.length, 4);
   assert.equal(findSigner(qr, UIDAI), null);
 });
 

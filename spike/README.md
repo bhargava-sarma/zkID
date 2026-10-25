@@ -22,7 +22,7 @@ runs locally and never prints what the code contains.
 
 - `secure-qr.mjs` decodes, parses and verifies a code. Every failure throws an
   error with a code.
-- `synthetic.mjs` builds **synthetic** V2 codes signed with a caller's test key.
+- `synthetic.mjs` builds **synthetic** V2 or V5 codes signed with a caller's test key.
   All values are labelled fake, and the tests check that they never verify
   under a UIDAI certificate.
 - `certs/` holds UIDAI's public Secure QR certificates.

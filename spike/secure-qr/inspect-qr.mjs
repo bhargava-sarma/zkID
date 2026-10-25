@@ -35,7 +35,9 @@ export function kind(buf) {
   if (buf.every((b) => b >= 0x20 && b < 0x7f)) {
     if (/^[A-Za-z]$/.test(s)) return 'one letter';
     if (/^[A-Za-z .,'\-]+$/.test(s)) return `${buf.length} bytes, letters and spaces`;
-    return `${buf.length} bytes, printable ASCII with digits or symbols`;
+    // Short mixed fields get a shape (a = letter, 9 = digit), never the characters.
+    const shape = buf.length <= 12 ? `, shape ${s.replace(/[A-Za-z]/g, 'a').replace(/[0-9]/g, '9')}` : '';
+    return `${buf.length} bytes, printable ASCII with digits or symbols${shape}`;
   }
   try {
     new TextDecoder('utf-8', { fatal: true }).decode(buf);
@@ -54,7 +56,7 @@ export function scanFields(signedData) {
     if (image) {
       const endAt = signedData.lastIndexOf(Buffer.from(image.end));
       const end = endAt >= pos ? endAt + image.end.length : null;
-      return { fields, image: { type: image.type, offset: pos, length: end && end - pos, after: end && signedData.length - end } };
+      return { fields, image: { type: image.type, offset: pos, length: end && end - pos, end, after: end && signedData.length - end } };
     }
     const delimiter = signedData.indexOf(0xff, pos);
     if (delimiter === -1) break;
@@ -97,6 +99,18 @@ function main() {
   if (image) {
     console.log(`photo       ${image.type} at offset ${image.offset}, right after field #${fields.length - 1}`);
     console.log(`            ${image.length ?? 'unknown'} bytes; ${image.after ?? 'unknown'} bytes after its end marker`);
+    if (image.after) {
+      const parts = [];
+      const rest = qr.signedData.subarray(image.end);
+      for (let pos = 0; pos <= rest.length; ) {
+        const next = rest.indexOf(0xff, pos);
+        const stop = next === -1 ? rest.length : next;
+        parts.push(kind(rest.subarray(pos, stop)));
+        pos = stop + 1;
+      }
+      const delimiters = parts.length - 1;
+      console.log(`after photo ${delimiters ? `${delimiters} 0xFF delimiter(s)` : 'no 0xFF delimiter'}; parts: ${parts.join(' | ')}`);
+    }
   } else {
     console.log('photo       no known image signature at the start of any field');
   }

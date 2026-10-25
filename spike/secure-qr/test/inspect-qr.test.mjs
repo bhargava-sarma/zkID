@@ -9,7 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { kind, scanFields } from '../inspect-qr.mjs';
 import { decodeEnvelope } from '../secure-qr.mjs';
-import { buildSignedData, makeSyntheticSecureQr, signAndEncode, syntheticFields, syntheticPhoto } from '../synthetic.mjs';
+import { buildSignedData, makeSyntheticSecureQr, signAndEncode, syntheticFields, syntheticPhoto, unknownTrailer } from '../synthetic.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SAMPLE = path.join(here, '..', 'local', 'uidai-official-sample-v1.txt');
@@ -25,6 +25,8 @@ test('field kinds describe without revealing', () => {
   assert.equal(kind(Buffer.from('Asha Rao')), '8 bytes, letters and spaces');
   assert.equal(kind(Buffer.from('रमेश', 'utf8')), '12 bytes, UTF-8 text with non-ASCII characters');
   assert.equal(kind(Buffer.from([0xc3, 0x28])), '2 bytes, binary');
+  assert.equal(kind(Buffer.from('xxxxxx4567')), '10 bytes, printable ASCII with digits or symbols, shape aaaaaa9999');
+  assert.equal(kind(Buffer.from('12/34, Some Long Road Name')), '26 bytes, printable ASCII with digits or symbols');
 });
 
 test('a synthetic V2 code: version marker, 17 fields, then the photo', () => {
@@ -37,7 +39,7 @@ test('a synthetic V2 code: version marker, 17 fields, then the photo', () => {
 test('an unknown layout with an extra local-language field and a JPEG photo is described', () => {
   const fields = { ...syntheticFields(), mobileLast4: 'रमेश' };
   const jpegPhoto = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), crypto.randomBytes(500), Buffer.from([0xff, 0xd9])]);
-  const signed = buildSignedData({ version: 'V5', fields, photo: jpegPhoto });
+  const signed = buildSignedData({ version: 'V9', fields, photo: jpegPhoto });
   const { fields: found, image } = scanFields(decodeEnvelope(signAndEncode(signed, keys.privateKey).text).signedData);
   assert.equal(found.length, 18);
   assert.match(kind(found[17].bytes), /UTF-8/);
@@ -58,10 +60,12 @@ test('privacy negative control: neither tool prints any field value', () => {
     pincode: '560099',
     vtc: 'ZZMARKERVTC',
     mobileLast4: '9876',
+    mobile: 'xxxxxx4567',
     referenceId: '4321' + '20261020123456789',
   };
   const file = path.join(dir, 'qr.txt');
-  fs.writeFileSync(file, makeSyntheticSecureQr(keys.privateKey, { version: 'V5', fields: syntheticFields(markers) }).text);
+  const trailing = Buffer.from('ZZMARKERTRAILER');
+  fs.writeFileSync(file, makeSyntheticSecureQr(keys.privateKey, { version: 'V5', fields: syntheticFields(markers), trailing }).text);
   const run = (script) => {
     try {
       return execFileSync(process.execPath, [path.join(here, '..', script), file], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -71,8 +75,9 @@ test('privacy negative control: neither tool prints any field value', () => {
   };
   const outputs = [run('inspect-qr.mjs'), run('verify-qr.mjs')];
   assert.match(outputs[0], /fields      18 before the photo/);
+  assert.match(outputs[0], /after photo no 0xFF delimiter; parts: 15 bytes, letters and spaces/);
   for (const out of outputs) {
-    for (const value of Object.values(markers)) assert.equal(out.includes(value), false, `printed "${value}"`);
+    for (const value of [...Object.values(markers), 'ZZMARKERTRAILER']) assert.equal(out.includes(value), false, `printed "${value}"`);
     assert.equal(out.includes('4321'), false, 'printed the Aadhaar last-4 digits');
   }
 });

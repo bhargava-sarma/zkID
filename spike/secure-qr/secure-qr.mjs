@@ -6,7 +6,8 @@
 //   -> data    gzip (UIDAI's sample) or zlib (Anon Aadhaar's test data)
 //   data       = signedData || signature (last 256 bytes)
 //   signature  RSASSA-PKCS1-v1_5 over SHA-256(signedData), RSA-2048
-//   signedData V2: "V2" 0xFF then 17 text fields, each ended by 0xFF, then the photo
+//   signedData V2, V5: "V2"/"V5" 0xFF then 17 text fields, each ended by 0xFF,
+//                  then the photo (V5: then 27 more bytes, purpose unknown)
 //              V1: 16 text fields, each ended by 0xFF, then the photo, then
 //                  SHA-256 hashes of mobile and/or email (32 bytes each)
 //   photo      a JPEG 2000 codestream: starts FF 4F, ends FF D9
@@ -30,7 +31,8 @@ const JPEG2000_SOC = [0xff, 0x4f];
 const JPEG2000_EOC = Buffer.from([0xff, 0xd9]);
 
 // Field order: UIDAI's V1 user manual, and Anon Aadhaar's notes on V2
-// (packages/circuits/src/helpers/extractor.circom at commit 4dad918).
+// (packages/circuits/src/helpers/extractor.circom at commit 4dad918). V5 as
+// measured on one real code (docs/issuer-research.md, section 3.2).
 const V1_FIELDS = [
   'emailMobileIndicator',
   'referenceId',
@@ -50,7 +52,10 @@ const V1_FIELDS = [
   'vtc',
 ];
 const V2_FIELDS = [...V1_FIELDS, 'mobileLast4'];
-export const FIELDS = { V1: V1_FIELDS, V2: V2_FIELDS };
+// Field 17 held 10 letters and digits in the one V5 code inspected, likely a
+// masked mobile number (not confirmed).
+const V5_FIELDS = [...V1_FIELDS, 'mobile'];
+export const FIELDS = { V1: V1_FIELDS, V2: V2_FIELDS, V5: V5_FIELDS };
 
 export function qrTextToBytes(text) {
   const digits = String(text).trim();
@@ -125,7 +130,8 @@ export function parseSignedData(signedData) {
     fields,
     delimiterIndices,
     photo,
-    // V1: the mobile/email hashes. V2 is described as having none; reported, not assumed.
+    // V1: the mobile/email hashes. V2 is described as having none; V5 had 27
+    // bytes in the one code inspected. Reported, not assumed.
     trailingBytes: signedData.length - (photo.offset + photo.length),
   };
 }

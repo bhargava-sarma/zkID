@@ -24,9 +24,9 @@ lists what the owner should fetch from an Indian network.
 
 | | Question | Finding | Basis |
 |---|---|---|---|
-| U1 | Secure QR layout | Confirmed on UIDAI's own sample: decimal integer → big-endian bytes → **gzip** → data; last **256 bytes** are an RSA-2048 **PKCS#1 v1.5 / SHA-256** signature over everything before them; fields separated by **0xFF**; photo is a **JPEG 2000** codestream. V1 has 16 text fields then photo then 32-byte mobile/email hashes; V2 adds a `V2` prefix and a last-4-digits-of-mobile field and is described as dropping the hashes. | [M] on V1; V2 layout [S], not seen on a real V2 code |
+| U1 | Secure QR layout | Confirmed on UIDAI-signed codes: decimal integer → big-endian bytes → **gzip** → data; last **256 bytes** are an RSA-2048 **PKCS#1 v1.5 / SHA-256** signature over everything before them; fields separated by **0xFF**; photo is a **JPEG 2000** codestream. V1 (UIDAI's 2019 sample): 16 text fields, photo, 32-byte mobile/email hashes. **Codes downloaded today are V5**: a `V5` prefix, the same 16 fields, a 10-character field 17, the photo, then **27 bytes of unknown purpose**. V2 is described by Anon Aadhaar and was not seen here. | [M] on V1 and on one real V5 code; V2 [S] |
 | U2 | Reference ID | 21 digits: **last 4 digits of the Aadhaar number** + generation time `YYYYMMDDHHMMSSsss` (IST). It changes on every download, so it cannot be nullifier material. | [M] sample (generated 2019-03-08); [P] Regulations 2(bc) mention the last 4 digits |
-| U3 | Certificate and rotation | **Rotated at least twice.** Keys seen: 2017–2020 ("DS UIDAI 4"), 2021–2024 and 2024–2026 (both "DS UIDAI 05", different keys). The newest one known **expired 2026-02-16**; the certificate signing today's codes was **not obtained** (uidai.gov.in unreachable). | [M] sample verifies under the 2017 key; certificates [P-copy] via Anon Aadhaar |
+| U3 | Certificate and rotation | **Rotated at least three times.** Keys: 2017–2020 ("DS UIDAI 4"); 2021–2024 and 2024–2026 (both "DS UIDAI 05", different keys); **2026–2029 ("DS UIDAI 06")**, which signs codes downloaded today. | [M] UIDAI's sample verifies under the 2017 key and the owner's code under the 2026 key; the 2021 and 2024 certificates [P-copy] via two independent projects; the 2026 one downloaded from UIDAI by the owner |
 | U4 | Offline e-KYC XML | XML-DSig. Not pursued: Secure QR is simpler, and secondary sources say the December 2025 amendment removed XML references from some regulations. In-circuit canonicalisation is avoidable (Anon DigiLocker hashes the signed bytes as they appear), so "impractical" was too strong, but there is no reason to prefer it. | [S] |
 | U5 | How Anon Aadhaar bounds hashing; its nullifier | **No partial hashing.** It hashes the whole signed data in-circuit, capped at **1536 bytes**, with zk-email's `Sha256Bytes`. Nullifier = Poseidon(nullifierSeed, Poseidon(photo[0..15]), Poseidon(photo[16..31])), photo packed into 32 × 31 bytes. | [P] source at commit `4dad918` |
 | U6 | Do current formats and rules still allow this? | Secure QR verification is an offline-verification method in the regulations (as compiled to Dec 2024), which place the code on Aadhaar letters, e-Aadhaar and PVC cards; e-Aadhaar is still an accepted form per PIB (May 2026). UIDAI's new **Aadhaar Verifiable Credentials** (SD-JWT / mDoc, 2026) exist alongside it but are only released to UIDAI-registered verifiers. Whether a site verifying a ZK proof derived from a Secure QR is an "offline verification seeking entity" with registration duties is **not settled**. | [P] regulations to Dec 2024, UIDAI docs, PIB; [S] Dec 2025 amendment |
@@ -103,15 +103,19 @@ All [M] results come from `spike/secure-qr` (`npm test`, `verify-qr.mjs`).
 
 ### 3.1 Encoding and signature
 
-| Step | UIDAI official sample (V1) | Anon Aadhaar test code (V2, test key) |
-|---|---|---|
-| QR text | 3,181 decimal digits | 3,169 digits |
-| Compressed | 1,321 bytes, **gzip** (`1f 8b 08`) | 1,316 bytes, zlib (`78 9c`) |
-| Decompressed | 1,385 bytes | 1,393 bytes |
-| Signed data | **1,129 bytes** | 1,137 bytes |
-| Signature | last 256 bytes; RSASSA-PKCS1-v1_5 / SHA-256 | same |
-| Verifies under | **UIDAI "DS UIDAI 4"** (2017-06-08 to 2020-06-07); not under the 2021 or 2024 keys | Anon Aadhaar's test certificate |
-| One flipped bit (data or signature) | rejected | rejected |
+| Step | UIDAI official sample (V1) | Anon Aadhaar test code (V2, test key) | Owner's e-Aadhaar (V5, 2026-10-25) |
+|---|---|---|---|
+| QR text | 3,181 decimal digits | 3,169 digits | 3,191 digits |
+| Compressed | 1,321 bytes, **gzip** (`1f 8b 08`) | 1,316 bytes, zlib (`78 9c`) | 1,325 bytes, **gzip** |
+| Decompressed | 1,385 bytes | 1,393 bytes | 1,432 bytes |
+| Signed data | **1,129 bytes** | 1,137 bytes | **1,176 bytes** |
+| Signature | last 256 bytes; RSASSA-PKCS1-v1_5 / SHA-256 | same | same |
+| Verifies under | **UIDAI "DS UIDAI 4"** (2017-06-08 to 2020-06-07); not under the 2021 or 2024 keys | Anon Aadhaar's test certificate | **UIDAI "DS UIDAI 06"** (2026-02-03 to 2029-02-03) |
+| One flipped bit (data or signature) | rejected | rejected | rejected |
+
+The owner's code was read from an e-Aadhaar PDF with `read-qr-image.mjs` and
+checked on the owner's machine with `verify-qr.mjs` and `inspect-qr.mjs`. Only
+their output, which holds lengths and kinds and no values, left that machine.
 
 UIDAI's sample is the "official test data" UIDAI published on its QR reader page
 [S: Anon Aadhaar's `scripts/generateTestData.ts`, ref 6]. It was generated on
@@ -121,31 +125,33 @@ details, so it is fetched to a gitignored directory
 
 ### 3.2 Field layout
 
-| # | V1 [M] | V2 [S, ref 6] |
-|---|---|---|
-| prefix | none | `V2`, then 0xFF |
-| 1 | email/mobile indicator (0–3) | same |
-| 2 | reference ID (21 digits) | same |
-| 3–5 | name, DOB (`DD-MM-YYYY` [M: pattern only]), gender (1 letter) | same |
-| 6–16 | care of, district, landmark, house, location, PIN, post office, state, street, sub-district, VTC | same |
-| 17 | (none) | last 4 digits of mobile |
-| then | photo: JPEG 2000, **888 bytes** in the sample, starting `FF 4F FF 51`, ending `FF D9` | photo |
-| then | **64 bytes**: mobile and email SHA-256 hashes (indicator 3) | described as removed |
+| # | V1 [M] | V2 [S, ref 6] | V5 [M, one real code] |
+|---|---|---|---|
+| prefix | none | `V2`, then 0xFF | `V5`, then 0xFF |
+| 1 | email/mobile indicator (0–3) | same | same (1 digit) |
+| 2 | reference ID (21 digits) | same | same |
+| 3–5 | name, DOB (`DD-MM-YYYY` [M: pattern only]), gender (1 letter) | same | same |
+| 6–16 | care of, district, landmark, house, location, PIN, post office, state, street, sub-district, VTC | same | same kinds (PIN 6 digits) |
+| 17 | (none) | last 4 digits of mobile | **10 characters**, letters and digits; likely a masked mobile number (unconfirmed) |
+| then | photo: JPEG 2000, **888 bytes** in the sample, starting `FF 4F FF 51`, ending `FF D9` | photo | photo: JPEG 2000, **900 bytes** |
+| then | **64 bytes**: mobile and email SHA-256 hashes (indicator 3) | described as removed | **27 bytes**, purpose unknown |
 
 The photo itself contains 0xFF bytes, so a parser must count the text-field
 delimiters and not split the whole buffer on 0xFF.
 
 Anon Aadhaar's V2 test data was made by converting UIDAI's V1 sample. It still
 carries the 64 hash bytes after the photo [M], although its own notes say V2 has
-none. Its test vector is therefore not exactly a V2 code, and nobody here has
-seen a real V2 code. `verify-qr.mjs` reports the bytes after the photo so the
-owner's real code settles this.
+none. Its test vector is therefore not exactly a V2 code. Nobody here has
+seen a real V2 code; the one current code seen is V5. The parser accepts V1, V2
+and V5 only, and rejects anything else (`UNSUPPORTED_VERSION`) instead of
+guessing.
 
 ### 3.3 Signed message size
 
 | Source | Signed bytes | SHA-256 blocks (64 B) |
 |---|---|---|
 | UIDAI V1 sample [M] | 1,129 | 18 |
+| Owner's V5 code [M] | 1,176 | 19 |
 | Synthetic V2, 888-byte photo [M] | 1,077 | 17 |
 | Anon Aadhaar's circuit bound [P] | ≤ 1,536 (padded) | ≤ 24 |
 
@@ -160,21 +166,23 @@ indirect evidence only.
 | `uidai-ds-4_2017-2020` | DS UNIQUE IDENTIFICATION AUTHORITY OF INDIA 4 | e-Mudhra Sub CA Class 3 for Document Signer 2014 | 2017-06-08 → 2020-06-07 | `7eec85303e0d63ef` | UIDAI's official sample verifies under it [M] |
 | `uidai-ds-05_2021-2024` | DS UNIQUE IDENTIFICATION AUTHORITY OF INDIA 05 | (n)Code Solutions CA 2014 | 2021-02-26 → 2024-02-27 | `e16ab47e49c6144a` | Anon Aadhaar's production key [S] |
 | `uidai-ds-05_2024-2026` | DS Unique Identification Authority of India 05 | (n)Code Solutions Sub-CA for DSC 2022 | 2024-02-21 → 2026-02-16 | `91ddf442fcce4ff0` | Anon Aadhaar's SDK accepts it [S] |
+| `uidai-ds-06_2026-2029` | DS Unique Identification Authority of India 06 | (n)Code Solutions Sub-CA for DSC 2022 | 2026-02-03 → 2029-02-03 | `5e74a86a0ce6ff94` | Downloaded from UIDAI by the owner; the owner's code verifies under it [M] |
 
-Files, fingerprints and provenance: `spike/secure-qr/certs/registry.json`. None
-of the three was cross-checked against uidai.gov.in. A second, independent
-project, `itxshakil/aadhaar-offline` (docs/installation.md at `dc20742`,
-2026-10-10), lists the same SHA-256 fingerprints for the 2021 and 2024
-certificates [S].
+Files, fingerprints and provenance: `spike/secure-qr/certs/registry.json`.
 
-That project also lists the **current** certificate [S, not yet obtained here]:
-
-- file `uidai_offline_publickey_2026.cer`;
-- subject "DS Unique Identification Authority of India 06", expiring 2029-02-03;
-- SHA-256 `E0:30:4B:9E:61:EE:36:40:EC:DD:AE:2D:B4:B6:17:F2:E2:67:8F:57:DB:C2:82:6C:2F:86:AC:5C:04:F2:77:DF`;
-- download link
-  `https://backend.uidai.gov.in/get/files/media/document/2026-07/uidai_offline_publickey_2026.cer`,
-  which also resets connections from this environment.
+- The first three were not cross-checked against uidai.gov.in.
+- A second, independent project, `itxshakil/aadhaar-offline`
+  (docs/installation.md at `dc20742`, 2026-10-10), lists the same SHA-256
+  fingerprints for the 2021, 2024 and 2026 certificates [S].
+- The owner downloaded the 2026 one, `uidai_offline_publickey_2026.cer`, from
+  UIDAI on 2026-10-25. Where to find it: per that project, UIDAI's "UIDAI
+  Certificate Details" developer page, which links
+  `https://backend.uidai.gov.in/get/files/media/document/2026-07/uidai_offline_publickey_2026.cer`
+  [S] (unreachable from this environment). Its SHA-256 is
+  `E0:30:4B:9E:61:EE:36:40:EC:DD:AE:2D:B4:B6:17:F2:E2:67:8F:57:DB:C2:82:6C:2F:86:AC:5C:04:F2:77:DF`.
+  Whatever its download path, the owner's e-Aadhaar verifies under it [M].
+  It is RSA-2048 with e = 65537, which the circuit's `RSAVerifier65537(121, 17)`
+  supports.
 
 By name it is the "offline" key, which UIDAI uses for both the Paperless
 Offline e-KYC XML and Secure QR.
@@ -194,10 +202,9 @@ Consequences for the design:
   by the 2024–2026 key passes the SDK's pre-check, but its proof fails
   `core.verify()` with "public key mismatch". It never checks the timestamp
   against the key's window.
-- **The key signing codes downloaded today is unknown.** The owner needs to
-  fetch the current certificate from UIDAI's Secure QR reader page, or check a
-  freshly downloaded e-Aadhaar with `verify-qr.mjs` and see whether any known key
-  verifies it.
+- **Codes downloaded today are signed by "DS UIDAI 06"** (2026–2029) [M]. Its
+  key hash is not in Anon Aadhaar's `core.verify()` either. Option A therefore
+  needs zkID's own registry, not Anon Aadhaar's SDK check.
 
 ## 5. Anon Aadhaar (prior work)
 
@@ -256,7 +263,7 @@ What is genuinely left for zkID is the protocol and evidence layer:
 | Whole signed data or signature | no: they contain the reference ID | n/a | rejected |
 | Name + DOB + gender (+ PIN) | yes, unless updated | low: guessable from public data, so nullifiers could be brute-forced and linked | rejected |
 | Last 4 Aadhaar digits | yes | 10⁴ | rejected |
-| **Photo (JPEG 2000 bytes)** | **unverified** | high (~888 bytes of compressed image) | best available; Anon Aadhaar's choice |
+| **Photo (JPEG 2000 bytes)** | **unverified** | high (~900 bytes of compressed image) | best available; Anon Aadhaar's choice |
 
 Known limits of the photo, all of which belong in the threat model:
 
@@ -274,6 +281,12 @@ Known limits of the photo, all of which belong in the threat model:
    The nullifier then limits this to one account per site, and the first party
    to use it wins. So an attacker with a photocopy can occupy the victim's slot
    before the victim does.
+4. **On V5 codes the nullifier also covers the 27 bytes after the photo.**
+   Anon Aadhaar's photo input runs from the last delimiter to the end of the
+   signed data. Changing only those 27 bytes changes the nullifier [M,
+   section 7.4]. If they differ between downloads, the nullifier does too, and
+   G3 fails for current codes. `compare-downloads.mjs` reports them separately
+   ("bytes after photo").
 
 ## 7. Cost (measured)
 
@@ -364,6 +377,36 @@ So age is an **output, not an assertion**. A verifier that does not check
 `ageAbove18 == 1` accepts minors. The verifier SDK must make that impossible to
 forget.
 
+### 7.4 Anon Aadhaar's circuit on current (V5) codes
+
+Synthetic V5 codes laid out like the owner's code (photo at offset 249, 1,176
+signed bytes, 27 bytes after the photo; all text synthetic), through the
+published v2.0.0 circuit [M, `check_v5_layout.mjs`, `results/v5_layout.json`]:
+
+| Photo size | Signed bytes | SHA-padded | Witness |
+|---|---|---|---|
+| 900 (owner's) | 1,176 | 1,216 | **accepted**, `ageAbove18 = 1` |
+| 920, 924, 925, 931 | 1,196–1,207 | 1,216 | accepted |
+| 932, 940, 960, 987, 988 | 1,208–1,264 | 1,280 | **rejected** (`Num2Bits`) |
+| 1,000 | 1,276 | 1,344 | rejected |
+
+- **The circuit accepts today's codes**: it does not check the version marker,
+  and V5 keeps every field it reads (timestamp, DOB, gender, PIN, state, photo)
+  at the same positions.
+- **There is a hard size limit.** The photo extractor accepts at most 1,023
+  bytes from the photo's first byte to the end of the SHA-padded data [P:
+  zk-email's `SelectSubArray` compares the length in 10 bits]. So whether a
+  code works depends on the photo size and on where the photo starts relative
+  to the 64-byte SHA blocks. At the owner's offset the limit is a 931-byte
+  photo, 31 bytes above the owner's. Over all offsets, with 27 trailing bytes,
+  it lies between 924 and 987 bytes: the limit is
+  987 − ((1,023 + offset) mod 64), measured exactly at offsets 256 (924), 257
+  (987) and 249 (931). Holders with bigger photos cannot prove at all: witness
+  generation fails with a bare `Num2Bits` assertion. The distribution of real
+  photo sizes is unknown.
+- **The 27 trailing bytes are part of the nullifier**: changing only them gives
+  a different nullifier.
+
 ## 8. Law and policy
 
 Read as a technical reader, not legal advice.
@@ -447,14 +490,20 @@ Why go:
 
 Conditions (open items for the owner, section 10):
 
-1. **Current certificate.** Obtain the certificate signing codes downloaded
-   now, and confirm a fresh e-Aadhaar verifies under it with `verify-qr.mjs`.
-2. **V2 layout.** Confirm on a real code: field count, the bytes after the
-   photo, and that the photo starts at the expected delimiter.
-3. **Photo stability.** Run `compare-downloads.mjs` on two downloads made on
-   different days. If the photo differs between downloads, a photo-based
-   nullifier fails G3 and the design needs another stable, high-entropy
-   signed field. None is known.
+1. **Current certificate: met.** "DS UIDAI 06" (2026–2029) verifies the
+   owner's e-Aadhaar downloaded on 2026-10-25.
+2. **Current layout: met, with caveats.** Today's codes are V5, and Anon
+   Aadhaar's circuit accepts a code of that shape (section 7.4). It has a
+   photo-size limit, and 27 unexplained bytes after the photo feed the
+   nullifier.
+3. **Nullifier stability: open.** Run `compare-downloads.mjs` on two downloads
+   made on different days:
+   - if the photo or the 27 bytes after it differ between downloads, Anon
+     Aadhaar's nullifier changes per download, and G3 fails for current codes;
+   - zkID's own circuit (option B) could then hash only the JPEG 2000 bytes, if
+     those prove stable;
+   - if the photo itself changes, the design needs another stable, high-entropy
+     signed field, and none is known.
 
 Redesign Phase 3. Writing "circuit v2" from scratch would mostly re-implement
 Anon Aadhaar's audited circuit with a far weaker setup (zkID v1 had one
@@ -482,7 +531,7 @@ contribution; Anon Aadhaar has 105 plus a beacon). Two options:
 A first, B only if it measurably improves a row of the attack report.
 
 **Fallback** if the conditions cannot be met: keep the issuer pluggable and use
-`spike/secure-qr/synthetic.mjs` as a format-faithful **test** issuer (V2
+`spike/secure-qr/synthetic.mjs` as a format-faithful **test** issuer (V2 or V5
 layout, gzip, RSA-2048, ephemeral key). The rest of the protocol stays intact,
 and the docs must say prominently that no real credential is verified.
 
@@ -495,18 +544,14 @@ and the docs must say prominently that no real credential is verified.
 
 ## 10. Open items for the owner
 
-1. **Certificate.** From an Indian network, download
-   `uidai_offline_publickey_2026.cer` (link in section 4; UIDAI lists it on its
-   "UIDAI Certificate Details" page in the developer section). Check that
-   `verify-qr.mjs --cert` prints the fingerprint given in section 4. Public,
-   safe to commit.
-2. **Your QR codes.** Download your e-Aadhaar twice, on different days.
+1. **Certificate.** Done: in `spike/secure-qr/certs/` since 2026-10-25.
+2. **Your QR codes.** First download done (2026-10-25). Download again on another day.
    Screenshot each QR into `spike/secure-qr/local/` (gitignored), then run:
    ```bash
    cd spike/secure-qr && npm install
    node read-qr-image.mjs local/qr-a.png local/a.txt   # QR image -> text, locally
-   node verify-qr.mjs local/a.txt --cert local/<UIDAI certificate>.cer
-   node compare-downloads.mjs local/a.txt local/b.txt --cert local/<UIDAI certificate>.cer
+   node verify-qr.mjs local/a.txt
+   node compare-downloads.mjs local/a.txt local/b.txt
    ```
    Share the printed output only; it contains no personal values.
 3. **Legal texts.** If possible, fetch:
