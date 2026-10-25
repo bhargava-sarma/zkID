@@ -1,12 +1,21 @@
 {
   "name": "zkid-spike-secure-qr",
   "private": true,
-  "description": "Phase 1 spike: parse and verify Aadhaar Secure QR codes in plain Node. No dependencies.",
+  "description": "Phase 1 spike: parse and verify Aadhaar Secure QR codes in plain Node. The parser has no dependencies; reading a QR from an image uses jsqr, pngjs and jpeg-js.",
   "type": "module",
   "scripts": {
     "test": "node --test \"test/*.test.mjs\"",
     "verify": "node verify-qr.mjs",
     "compare": "node compare-downloads.mjs",
-    "fetch-uidai-sample": "node fetch-uidai-sample.mjs"
+    "fetch-uidai-sample": "node fetch-uidai-sample.mjs",
+    "read-image": "node read-qr-image.mjs"
+  },
+  "dependencies": {
+    "jpeg-js": "0.4.4",
+    "jsqr": "1.4.0",
+    "pngjs": "7.0.0"
+  },
+  "devDependencies": {
+    "qrcode": "1.5.4"
   }
 }

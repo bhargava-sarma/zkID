@@ -484,14 +484,15 @@ and the docs must say prominently that no real credential is verified.
    certificate(s) from UIDAI's QR code reader page
    (`https://uidai.gov.in/en/ecosystem/authentication-devices-documents/qr-code-reader.html`)
    or the `images/authDoc/` path Anon Aadhaar cites. Public, safe to commit.
-2. **Your QR codes.** Download your e-Aadhaar twice, on different days. Save
-   each QR's decimal text to `spike/secure-qr/local/` (gitignored), then run:
+2. **Your QR codes.** Download your e-Aadhaar twice, on different days.
+   Screenshot each QR into `spike/secure-qr/local/` (gitignored), then run:
    ```bash
-   cd spike/secure-qr
-   node verify-qr.mjs local/a.txt
+   cd spike/secure-qr && npm install
+   node read-qr-image.mjs local/qr-a.png local/a.txt   # QR image -> text, locally
+   node verify-qr.mjs local/a.txt --cert local/<UIDAI certificate>.cer
    node compare-downloads.mjs local/a.txt local/b.txt
    ```
-   Share the output; it contains no personal values.
+   Share the printed output only; it contains no personal values.
 3. **Legal texts.** If possible, fetch:
    - the consolidated regulations (UIDAI "clean copy" of 30-12-2025);
    - the 30-04-2026 circular on Aadhaar Verifiable Credentials;
