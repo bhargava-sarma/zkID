@@ -3,20 +3,25 @@
 // same person's Secure QR? Prints equal/different and byte lengths only, never
 // values, so its output can be shared.
 //
-// Usage: node compare-downloads.mjs <qrA.txt> <qrB.txt>
+// Usage: node compare-downloads.mjs <qrA.txt> <qrB.txt> [--cert <file>...]
 // Keep the inputs in spike/secure-qr/local/ (gitignored).
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { decodeSecureQr, findSigner, parseReferenceId } from './secure-qr.mjs';
 import { loadUidaiCerts } from './certs.mjs';
 
-const [fileA, fileB] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const [fileA, fileB] = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--cert');
 if (!fileA || !fileB) {
-  console.error('Usage: node compare-downloads.mjs <qrA.txt> <qrB.txt>');
+  console.error('Usage: node compare-downloads.mjs <qrA.txt> <qrB.txt> [--cert <file>...]');
   process.exit(2);
 }
+const extra = args
+  .flatMap((a, i) => (a === '--cert' ? [args[i + 1]] : []))
+  .map((p) => ({ label: p, cert: new crypto.X509Certificate(fs.readFileSync(p)) }));
 
-const certs = loadUidaiCerts();
+const certs = [...loadUidaiCerts(), ...extra];
 const [a, b] = [fileA, fileB].map((f) => decodeSecureQr(fs.readFileSync(f, 'utf8')));
 const signerOf = (qr) => findSigner(qr, certs)?.label ?? 'none of the known UIDAI certificates';
 const row = (name, x, y) =>

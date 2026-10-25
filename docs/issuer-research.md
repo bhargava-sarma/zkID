@@ -506,7 +506,7 @@ and the docs must say prominently that no real credential is verified.
    cd spike/secure-qr && npm install
    node read-qr-image.mjs local/qr-a.png local/a.txt   # QR image -> text, locally
    node verify-qr.mjs local/a.txt --cert local/<UIDAI certificate>.cer
-   node compare-downloads.mjs local/a.txt local/b.txt
+   node compare-downloads.mjs local/a.txt local/b.txt --cert local/<UIDAI certificate>.cer
    ```
    Share the printed output only; it contains no personal values.
 3. **Legal texts.** If possible, fetch:
