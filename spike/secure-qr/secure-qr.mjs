@@ -148,11 +148,17 @@ export function verifySignature(signedData, signature, key) {
   return crypto.verify('sha256', signedData, { key: toKey(key), padding: crypto.constants.RSA_PKCS1_PADDING }, signature);
 }
 
-export function decodeSecureQr(text) {
+// The layout-independent part: text -> bytes -> decompress -> data and signature.
+// The signature can be checked even when the field layout is unknown.
+export function decodeEnvelope(text) {
   const compressed = qrTextToBytes(text);
   const { data, compression } = decompress(compressed);
-  const { signedData, signature } = splitSignature(data);
-  return { compression, compressedLength: compressed.length, signedData, signature, ...parseSignedData(signedData) };
+  return { compression, compressedLength: compressed.length, dataLength: data.length, ...splitSignature(data) };
+}
+
+export function decodeSecureQr(text) {
+  const envelope = decodeEnvelope(text);
+  return { ...envelope, ...parseSignedData(envelope.signedData) };
 }
 
 // certs: [{ label, cert: X509Certificate }]. Returns the entry that verifies, or null.

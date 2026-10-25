@@ -12,6 +12,7 @@ npm run fetch-uidai-sample   # UIDAI's official V1 sample -> local/ (gitignored)
 npm test                     # synthetic V2 codes, negative controls, UIDAI sample
 node verify-qr.mjs local/uidai-official-sample-v1.txt
 node read-qr-image.mjs local/qr-a.png local/a.txt    # a QR screenshot -> its text
+node inspect-qr.mjs local/a.txt                      # structure of any version, no values
 node compare-downloads.mjs local/a.txt local/b.txt   # Phase 1.3, on two real downloads
 ```
 
