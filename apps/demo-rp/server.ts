@@ -45,6 +45,10 @@ const verifier = createVerifier({ verifierId, registry: registry(), requestTtlSe
 // Session (cookie) -> its latest request and result. Challenge -> request and session.
 const sessions = new Map<string, { challenge?: string; result?: VerifyResult; account?: number }>();
 const pending = new Map<string, { request: ProofRequest; sid: string }>();
+// Browsers share cookies across the ports of one host, so each demo verifier on
+// localhost needs its own cookie name, or they overwrite each other's session.
+const COOKIE = `zkid_demo_${new URL(verifierId).port || 'site'}`;
+const cookieValue = new RegExp(`(?:^|;\\s*)${COOKIE}=([0-9a-f]{32})`);
 const accounts = new Map<string, number>(); // nullifier -> account number
 
 const holderUrl = (challenge: string) => `${holder}/?request=${encodeURIComponent(`${verifierId}/zkid/request/${challenge}`)}`;
@@ -77,11 +81,11 @@ const qrPage = (qr: string, url: string) =>
 <script>setInterval(async () => { if (await (await fetch('/zkid/status')).json()) location = '/'; }, 2000);</script>`);
 
 function sessionOf(req: http.IncomingMessage, res: http.ServerResponse) {
-  let sid = /(?:^|;\s*)sid=([0-9a-f]{32})/.exec(req.headers.cookie ?? '')?.[1];
+  let sid = cookieValue.exec(req.headers.cookie ?? '')?.[1];
   if (!sid || !sessions.has(sid)) {
     sid = crypto.randomBytes(16).toString('hex');
     sessions.set(sid, {});
-    res.setHeader('set-cookie', `sid=${sid}; HttpOnly; SameSite=Lax; Path=/`);
+    res.setHeader('set-cookie', `${COOKIE}=${sid}; HttpOnly; SameSite=Lax; Path=/`);
   }
   return { sid, session: sessions.get(sid)! };
 }

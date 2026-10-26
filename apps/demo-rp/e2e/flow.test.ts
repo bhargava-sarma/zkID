@@ -158,6 +158,14 @@ test('another verifier, reached through its request QR, sees a different nullifi
   assert.notEqual(second.status.nullifier, first.status.nullifier);
 });
 
+test('each verifier keeps its own session, although both run on localhost', async () => {
+  // Browsers share cookies across ports: with one cookie name, B's session replaced A's.
+  const page = await (await contextOnce()).newPage();
+  await page.goto(`${A}/`);
+  assert.match(await page.textContent('[data-testid=granted]'), /account here is #1/);
+  await page.close();
+});
+
 test('a second account at the same verifier is refused: NULLIFIER_SEEN', { timeout: PROOF_TIMEOUT }, async () => {
   await context.clearCookies(); // a new session at A, as if from another browser
   const again = await proveAt(A);
