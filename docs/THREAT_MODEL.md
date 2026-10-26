@@ -197,28 +197,28 @@ where a test is listed, the test shows it succeeding.
 
 | Test | Phase | Input | Expected | Evidence so far |
 |---|---|---|---|---|
-| T1.1 | 4 | valid proof from a QR signed with a fresh key | `UNTRUSTED_ISSUER` | |
+| T1.1 | 4 | valid proof from a QR signed with a fresh key | `UNTRUSTED_ISSUER` | passes in `packages/verifier-sdk` tests |
 | T1.2 | 3 | one byte changed in each text field, each delimiter, the start, middle and end of the photo, and the trailing bytes | witness generation fails | passes in `packages/circuit` tests; Phase 1: `check_controls.mjs` (one DOB byte, one photo byte) |
 | T1.3 | 3 | one signature bit changed | witness generation fails | passes in `packages/circuit` tests; Phase 1: `check_controls.mjs` |
 | T1.4 | 3 | valid signature, another key as input | witness generation fails | passes in `packages/circuit` tests; Phase 1: `check_controls.mjs` |
-| T1.5 | 4 | production build with a test key in the registry | build fails | |
-| T1.6 | 4 | registry key, `timestamp` outside its validity window | `ISSUER_KEY_NOT_VALID` | |
+| T1.5 | 4 | production build with a test key in the registry | build fails | passes in `packages/issuer-registry` tests |
+| T1.6 | 4 | registry key, `timestamp` outside its validity window | `ISSUER_KEY_NOT_VALID` | passes in `packages/verifier-sdk` tests |
 | T1.7 | 3 | one byte changed in the wasm, proving key or verification key | rejected on load (SHA-256 mismatch) | passes in `packages/circuit` tests |
 | T1.8 | 3 | DOB field of 4 bytes (year only) | witness generation fails | passes in `packages/circuit` tests |
 | T1.9 | 3 | DOB of 10 bytes with non-digits | outputs recorded; documents the missing range check | passes in `packages/circuit` tests |
-| T1.10 | 3 and 4 | QR generated the day before, on, and after the holder's 18th and 19th birthdays; an adult with the age flag off | `ageAbove18` is 1 only on and after the 19th birthday (Phase 3); `AGE_NOT_PROVEN` for every 0 (Phase 4) | circuit part passes in `packages/circuit` tests; Phase 1: `check_controls.mjs` (under 18; flag off) |
-| T2.1 | 4 | proof for verifier X sent to verifier Y | `CHALLENGE_MISMATCH` | |
-| T2.2 | 4 | the same proof sent twice to X | second: `CHALLENGE_REUSED` | |
-| T2.3 | 4 | re-randomized copy of an accepted proof | `CHALLENGE_REUSED` | |
-| T2.4 | 4 | proof sent after the request expired | `CHALLENGE_EXPIRED` | |
-| T2.5 | 4 | proof under another `nullifierSeed` | `NULLIFIER_SEED_MISMATCH` | |
+| T1.10 | 3 and 4 | QR generated the day before, on, and after the holder's 18th and 19th birthdays; an adult with the age flag off | `ageAbove18` is 1 only on and after the 19th birthday (Phase 3); `AGE_NOT_PROVEN` for every 0 (Phase 4) | passes in `packages/circuit` and `packages/verifier-sdk` tests; Phase 1: `check_controls.mjs` (under 18; flag off) |
+| T2.1 | 4 | proof for verifier X sent to verifier Y | `CHALLENGE_MISMATCH` | passes in `packages/verifier-sdk` tests |
+| T2.2 | 4 | the same proof sent twice to X | second: `CHALLENGE_REUSED` | passes in `packages/verifier-sdk` tests |
+| T2.3 | 4 | re-randomized copy of an accepted proof | `CHALLENGE_REUSED` | passes in `packages/verifier-sdk` tests |
+| T2.4 | 4 | proof sent after the request expired | `CHALLENGE_EXPIRED` | passes in `packages/verifier-sdk` tests |
+| T2.5 | 4 | proof under another `nullifierSeed` | `NULLIFIER_SEED_MISMATCH` | passes in `packages/verifier-sdk` tests |
 | T2.6 | 6 | request from the attacker's session, proved by the victim | accepted (not defended) | |
 | T3.1 | 6 | lent QR, first account | accepted (not defended) | |
-| T3.2 | 4 | lent QR, second account at the same site | `NULLIFIER_SEEN` | |
-| T3.3 | 4 | QR older than `maxAge` | `CREDENTIAL_TOO_OLD` | |
+| T3.2 | 4 | lent QR, second account at the same site | `NULLIFIER_SEEN` | passes in `packages/verifier-sdk` tests |
+| T3.3 | 4 | QR older than `maxAge` | `CREDENTIAL_TOO_OLD` | passes in `packages/verifier-sdk` tests |
 | T3.4 | 6 | same identity, new photo bytes | new nullifier; second account accepted (not defended) | |
-| T3.5 | 4 | QR exactly `maxAge` old, and one hour older | accepted, then `CREDENTIAL_TOO_OLD` | |
-| T4.1 | 3 | two downloads: same photo and trailing bytes, different generation time | equal nullifiers; second account `NULLIFIER_SEEN` | circuit part passes in `packages/circuit` tests; Phase 1: `check_controls.mjs`; the owner's two real downloads, by byte comparison |
+| T3.5 | 4 | QR exactly `maxAge` old, and one hour older | accepted, then `CREDENTIAL_TOO_OLD` | passes in `packages/verifier-sdk` tests |
+| T4.1 | 3 | two downloads: same photo and trailing bytes, different generation time | equal nullifiers; second account `NULLIFIER_SEEN` | passes in `packages/circuit` and `packages/verifier-sdk` tests; Phase 1: `check_controls.mjs`; the owner's two real downloads, by byte comparison |
 | T4.2 | 6 | the same photo in a V1 layout (64 trailing bytes) and a V5 layout (27) | different nullifiers (documents A4.3) | |
 | T5.1 | 3 | same QR, two verifier ids | different nullifiers | passes in `packages/circuit` tests; Phase 1: `check_controls.mjs` |
 | T5.2 | 6 | only a copy of the QR | its nullifier for any verifier id, computed offline, matches the holder's (documents A5.2) | |
@@ -227,10 +227,10 @@ where a test is listed, the test shows it succeeding.
 | T6.1 | 5 | every proof the holder app makes | exactly the nine signals of section 1.1; `gender`, `pinCode` and `state` are 0 | |
 | T6.2 | 5 | request asking for gender, PIN code or state | holder app refuses with a typed error | |
 | T6.3 | 5 | full flow under network capture | no request carries the QR digits, its bytes, the photo or any field value | |
-| T7.1 | 3 and 4 | each public signal changed after proving | Groth16 verification fails (Phase 3); `BAD_PROOF` (Phase 4) | circuit part passes in `packages/circuit` tests |
-| T7.2 | 4 | each proof element changed | `BAD_PROOF` | |
+| T7.1 | 3 and 4 | each public signal changed after proving | Groth16 verification fails (Phase 3); `BAD_PROOF`, except `nullifierSeed` and `signalHash`, which the SDK checks first: `NULLIFIER_SEED_MISMATCH`, `CHALLENGE_MISMATCH` (Phase 4) | passes in `packages/circuit` and `packages/verifier-sdk` tests |
+| T7.2 | 4 | each proof element changed | `BAD_PROOF` | passes in `packages/verifier-sdk` tests |
 | T7.3 | 5 | every signed byte of a synthetic V5 QR flipped, one at a time, in the holder app's parser | signature check fails before proving | |
-| T7.4 | 4 | `verifierId`, challenge or `maxAge` changed after proving | `CHALLENGE_MISMATCH` | |
+| T7.4 | 4 | `verifierId`, challenge or `maxAge` changed after proving | `CHALLENGE_MISMATCH` | passes in `packages/verifier-sdk` tests |
 | T7.5 | 5 | malformed QR text: not decimal, bad compression, unknown version, truncated | typed parser error | `packages/secure-qr` tests |
 | T7.6 | 3 | delimiter positions shifted | witness generation fails | passes in `packages/circuit` tests; Phase 1: `check_controls.mjs` (DOB hint) |
 

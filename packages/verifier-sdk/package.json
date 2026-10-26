@@ -1,0 +1,18 @@
+{
+  "name": "@zkid/verifier-sdk",
+  "private": true,
+  "description": "Verifier side of zkID: single-use proof requests bound to the verifier's origin, and verification of Anon Aadhaar circuit proofs with typed failure codes.",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "node --test \"test/*.test.ts\"",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "snarkjs": "0.7.6"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.1",
+    "typescript": "5.9.3"
+  }
+}
