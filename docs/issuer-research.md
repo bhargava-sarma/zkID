@@ -542,6 +542,8 @@ contribution; Anon Aadhaar has 105 plus a beacon). Two options:
   ceremony.
 
 A first, B only if it measurably improves a row of the attack report.
+**Owner's decision (2026-10-26): A.** The threat model for it is in
+`docs/THREAT_MODEL.md`.
 
 **Fallback** if the conditions cannot be met: keep the issuer pluggable and use
 `spike/secure-qr/synthetic.mjs` as a format-faithful **test** issuer (V2 or V5
@@ -572,7 +574,7 @@ and the docs must say prominently that no real credential is verified.
    - the consolidated regulations (UIDAI "clean copy" of 30-12-2025);
    - the 30-04-2026 circular on Aadhaar Verifiable Credentials;
    - DPDP Rules 2025, rule 10.
-4. **Phase 3.** Choose option A or B.
+4. **Phase 3.** Done: option A (2026-10-26).
 
 ## References
 
