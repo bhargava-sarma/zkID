@@ -17,7 +17,16 @@ bash setup/verify-setup.sh   # rebuilds the circuit and runs snarkjs zkey verify
 `AA_ARTIFACTS=<dir>` points the tests and benchmarks at artifacts kept
 elsewhere. Without artifacts, the circuit tests are reported as skipped.
 
-## API (`index.mjs`)
+## API
+
+`input.mjs` uses no platform API; the holder app runs it in the browser:
+
+- `circuitInput(qr, modulus, { nullifierSeed, signalHash })`: the circuit input
+  for a decoded QR (`packages/secure-qr`) and its signing key's modulus, as a
+  BigInt. Only the age bit is revealed.
+- `keyHashFromModulus(modulus)`: the circuit's `pubkeyHash` for a modulus.
+
+`index.mjs` (Node) re-exports those and adds:
 
 - `buildInput(qrText, key, { nullifierSeed, signalHash })`: the circuit input
   for a V2 or V5 Secure QR and the RSA key (or certificate) that signed it. Only

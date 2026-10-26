@@ -182,7 +182,10 @@ where a test is listed, the test shows it succeeding.
 - **Network anonymity** (A5.4) and **denial of service**.
 - **Every holder.** Photos above 924–987 bytes cannot be proved
   (issuer-research, section 7.4), a DOB not in `DD-MM-YYYY` fails (T1.8), and
-  mobile proving is unmeasured while desktop proving needs about 5 GB.
+  proving in a desktop browser needs about 5 GB of memory (2.6 GB on one
+  thread). On the one phone tried, the tab ran out of memory; single-thread
+  proving on a phone is unmeasured ([circuit-spec.md](circuit-spec.md),
+  section 5).
 - **Novelty.** RSA in a circuit, the circuit itself and the nullifier
   construction are Anon Aadhaar's. zkID contributes the request protocol, the
   seed and freshness policy, the key registry with validity windows, the SDK,
@@ -223,15 +226,15 @@ where a test is listed, the test shows it succeeding.
 | T5.1 | 3 | same QR, two verifier ids | different nullifiers | passes in `packages/circuit` tests; Phase 1: `check_controls.mjs` |
 | T5.2 | 6 | only a copy of the QR | its nullifier for any verifier id, computed offline, matches the holder's (documents A5.2) | |
 | T5.3 | 6 | the same QR at two verifiers | identical `timestamp` and `pubkeyHash` (documents A5.3) | |
-| T5.4 | 5 | request served from origin B naming verifier A | holder app refuses | |
-| T6.1 | 5 | every proof the holder app makes | exactly the nine signals of section 1.1; `gender`, `pinCode` and `state` are 0 | |
-| T6.2 | 5 | request asking for gender, PIN code or state | holder app refuses with a typed error | |
-| T6.3 | 5 | full flow under network capture | no request carries the QR digits, its bytes, the photo or any field value | |
+| T5.4 | 5 | request served from origin B naming verifier A | holder app refuses | passes in `frontend/src/holder` tests (`WRONG_ORIGIN`) |
+| T6.1 | 5 | every proof the holder app makes | exactly the nine signals of section 1.1; `gender`, `pinCode` and `state` are 0 | passes in `frontend/src/holder` tests (the circuit input) and the `apps/demo-rp` end-to-end test (every proof posted) |
+| T6.2 | 5 | request asking for gender, PIN code or state | holder app refuses with a typed error | passes in `frontend/src/holder` tests (`UNSUPPORTED_REQUEST`) |
+| T6.3 | 5 | full flow under network capture | no request carries the QR digits, its bytes, the photo or any field value | passes in the `apps/demo-rp` end-to-end test: headless Chromium, every request of the pages and the proving worker captured |
 | T7.1 | 3 and 4 | each public signal changed after proving | Groth16 verification fails (Phase 3); `BAD_PROOF`, except `nullifierSeed` and `signalHash`, which the SDK checks first: `NULLIFIER_SEED_MISMATCH`, `CHALLENGE_MISMATCH` (Phase 4) | passes in `packages/circuit` and `packages/verifier-sdk` tests |
 | T7.2 | 4 | each proof element changed | `BAD_PROOF` | passes in `packages/verifier-sdk` tests |
-| T7.3 | 5 | every signed byte of a synthetic V5 QR flipped, one at a time, in the holder app's parser | signature check fails before proving | |
+| T7.3 | 5 | every signed byte of a synthetic V5 QR flipped, one at a time, in the holder app's parser | signature check fails before proving | passes in `packages/secure-qr` tests (`web.mjs`, the holder app's parser) |
 | T7.4 | 4 | `verifierId`, challenge or `maxAge` changed after proving | `CHALLENGE_MISMATCH` | passes in `packages/verifier-sdk` tests |
-| T7.5 | 5 | malformed QR text: not decimal, bad compression, unknown version, truncated | typed parser error | `packages/secure-qr` tests |
+| T7.5 | 5 | malformed QR text: not decimal, bad compression, unknown version, truncated | typed parser error | passes in `packages/secure-qr` tests, for the Node parser and the holder app's (`web.mjs`) |
 | T7.6 | 3 | delimiter positions shifted | witness generation fails | passes in `packages/circuit` tests; Phase 1: `check_controls.mjs` (DOB hint) |
 
 `tools/repo-checks/threat_model.test.mjs` checks this document: every goal

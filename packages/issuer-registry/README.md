@@ -2,7 +2,9 @@
 
 The issuer keys a zkID verifier trusts: UIDAI's Secure QR signing keys, each
 stored as the key hash Anon Aadhaar's circuit outputs (`pubkeyHash`), with the
-certificate's validity window.
+certificate's validity window. Each entry also holds the key's RSA modulus, so
+the holder app can check a QR's signature before proving; `checkRegistry`
+refuses an entry whose modulus does not hash to its `keyHash`.
 
 ```bash
 cd packages/issuer-registry

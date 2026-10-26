@@ -1,4 +1,4 @@
-// Local entry point. On Vercel, api/index.js exports the same app.
+// Local entry point. On Vercel, vercel.json routes /api/* to app.js.
 const app = require('./app');
 
 const PORT = process.env.PORT || 3001;

@@ -21,6 +21,7 @@ export function entries() {
       issuer: 'UIDAI',
       subject: cert.subject.split('\n').find((line) => line.startsWith('CN='))?.slice(3) ?? cert.subject,
       keyHash: keyHash(cert),
+      modulus: Buffer.from(cert.publicKey.export({ format: 'jwk' }).n, 'base64url').toString('hex'),
       notBefore: Date.parse(cert.validFrom) / 1000,
       notAfter: Date.parse(cert.validTo) / 1000,
       spkiSha256: sha256(cert.publicKey.export({ type: 'spki', format: 'der' })),

@@ -8,11 +8,13 @@
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import { keyHashFromModulus } from '../circuit/input.mjs';
 
 export interface IssuerKey {
   id: string;
   issuer: string;
   keyHash: string; // the circuit's pubkeyHash for this key, decimal
+  modulus: string; // RSA modulus, hex (e = 65537); the holder app needs it
   notBefore: number; // Unix seconds
   notAfter: number;
   spkiSha256: string;
@@ -51,8 +53,11 @@ export function checkRegistry(registry: Registry): Registry {
   const compromised = compromisedSpkiHashes();
   const seen = new Set<string>();
   for (const key of registry.keys) {
-    if (!/^[0-9]+$/.test(key.keyHash) || !(key.notBefore < key.notAfter) || !/^[0-9a-f]{64}$/.test(key.spkiSha256)) {
-      throw new RegistryError('BAD_ENTRY', `${key.id}: needs a decimal keyHash, notBefore < notAfter and an SPKI SHA-256.`);
+    if (!/^[0-9]+$/.test(key.keyHash) || !(key.notBefore < key.notAfter) || !/^[0-9a-f]{64}$/.test(key.spkiSha256) || !/^[0-9a-f]{512}$/.test(key.modulus)) {
+      throw new RegistryError('BAD_ENTRY', `${key.id}: needs a decimal keyHash, notBefore < notAfter, an SPKI SHA-256 and a 2048-bit modulus.`);
+    }
+    if (keyHashFromModulus(BigInt(`0x${key.modulus}`)) !== key.keyHash) {
+      throw new RegistryError('BAD_ENTRY', `${key.id}: keyHash does not match the modulus.`);
     }
     if (compromised.has(key.spkiSha256)) {
       throw new RegistryError('COMPROMISED_KEY', `${key.id} is listed in security/compromised-keys.json.`);
@@ -88,6 +93,7 @@ export function testRegistry(keys: TestKey[]): Registry {
       id: k.id ?? `test-key-${i + 1}`,
       issuer: 'TEST (ephemeral key, not UIDAI)',
       keyHash: k.keyHash,
+      modulus: Buffer.from(k.publicKey.export({ format: 'jwk' }).n as string, 'base64url').toString('hex'),
       notBefore: k.notBefore ?? 0,
       notAfter: k.notAfter ?? 2 ** 32,
       spkiSha256: spkiSha256(k.publicKey),

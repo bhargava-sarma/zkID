@@ -1,8 +1,8 @@
 // Anon Aadhaar's Secure QR circuit, AadhaarQRVerifier(121, 17, 1536), from its
-// published v2.0.0 artifacts. zkID uses it unchanged (option A; see
-// docs/circuit-spec.md). This module builds the circuit input from a Secure QR,
-// computes witnesses and proofs, verifies proofs, and refuses any artifact
-// whose SHA-256 differs from artifacts.json.
+// published v2.0.0 artifacts, in Node. zkID uses it unchanged (option A; see
+// docs/circuit-spec.md). This module computes witnesses and proofs, verifies
+// proofs, and refuses any artifact whose SHA-256 differs from artifacts.json.
+// The circuit input is built by input.mjs, which also runs in a browser.
 //
 // Every failure throws a CircuitError with a code. Nothing falls back silently.
 
@@ -10,39 +10,25 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { poseidon9 } from 'poseidon-lite';
 import * as snarkjs from 'snarkjs';
 import { decodeSecureQr } from '../secure-qr/secure-qr.mjs';
+import { CircuitError, PUBLIC_SIGNALS, circuitInput, keyHashFromModulus, namedSignals } from './input.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const MANIFEST = JSON.parse(fs.readFileSync(path.join(here, 'artifacts.json'), 'utf8'));
 export const DEFAULT_DIR = path.join(here, 'artifacts');
 
-export class CircuitError extends Error {
-  constructor(code, message) {
-    super(`${code}: ${message}`);
-    this.name = 'CircuitError';
-    this.code = code;
-  }
-}
-
-export const LIMB_BITS = 121;
-export const LIMBS = 17;
-export const MAX_DATA_BYTES = 1536;
-// The photo extractor accepts at most this many bytes from the photo's first
-// byte to the end of the SHA-padded data (zk-email SelectSubArray, 10-bit length).
-export const MAX_PHOTO_SPAN = 1023;
-const FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
-
-// Public signals in the order snarkjs returns them: 7 outputs, then 2 public inputs.
-export const PUBLIC_SIGNALS = ['pubkeyHash', 'nullifier', 'timestamp', 'ageAbove18', 'gender', 'pinCode', 'state', 'nullifierSeed', 'signalHash'];
-
-export function namedSignals(publicSignals) {
-  if (!Array.isArray(publicSignals) || publicSignals.length !== PUBLIC_SIGNALS.length) {
-    throw new CircuitError('BAD_PUBLIC_SIGNALS', `Expected ${PUBLIC_SIGNALS.length} public signals.`);
-  }
-  return Object.fromEntries(PUBLIC_SIGNALS.map((name, i) => [name, String(publicSignals[i])]));
-}
+export {
+  CircuitError,
+  LIMBS,
+  LIMB_BITS,
+  MAX_DATA_BYTES,
+  MAX_PHOTO_SPAN,
+  PUBLIC_SIGNALS,
+  circuitInput,
+  keyHashFromModulus,
+  namedSignals,
+} from './input.mjs';
 
 // ---- Artifacts --------------------------------------------------------------
 
@@ -68,15 +54,7 @@ export async function checkedArtifact(name, dir = DEFAULT_DIR) {
   return file;
 }
 
-// ---- Keys -------------------------------------------------------------------
-
-const toBigInt = (bytes) => BigInt(`0x${Buffer.from(bytes).toString('hex')}`);
-
-// Least-significant limb first.
-function limbs(value) {
-  const mask = (1n << BigInt(LIMB_BITS)) - 1n;
-  return Array.from({ length: LIMBS }, (_, i) => (value >> (BigInt(LIMB_BITS) * BigInt(i))) & mask);
-}
+// ---- Keys and input -----------------------------------------------------------
 
 function modulusOf(key) {
   const publicKey = key instanceof crypto.X509Certificate ? key.publicKey : key;
@@ -84,75 +62,15 @@ function modulusOf(key) {
     throw new CircuitError('UNSUPPORTED_KEY', 'Expected an RSA public key or certificate.');
   }
   const { n, e } = publicKey.export({ format: 'jwk' });
-  const modulus = toBigInt(Buffer.from(n, 'base64url'));
-  if (e !== 'AQAB' || modulus.toString(2).length !== 2048) {
-    throw new CircuitError('UNSUPPORTED_KEY', 'The circuit verifies RSA-2048 with e = 65537 only.');
-  }
-  return modulus;
+  if (e !== 'AQAB') throw new CircuitError('UNSUPPORTED_KEY', 'The circuit verifies RSA-2048 with e = 65537 only.');
+  return BigInt(`0x${Buffer.from(n, 'base64url').toString('hex')}`);
 }
 
-// The circuit's pubkeyHash output: Poseidon over the 17 key limbs, merged in
-// pairs (limb[2i] + limb[2i+1] * 2^121) into 9 inputs.
-export function keyHash(key) {
-  const l = limbs(modulusOf(key));
-  const inputs = [];
-  for (let i = 0; i < LIMBS; i += 2) inputs.push(i + 1 < LIMBS ? l[i] + (l[i + 1] << BigInt(LIMB_BITS)) : l[i]);
-  return poseidon9(inputs).toString();
-}
+// The circuit's pubkeyHash for an RSA public key or certificate.
+export const keyHash = (key) => keyHashFromModulus(modulusOf(key));
 
-// ---- Input ------------------------------------------------------------------
-
-// SHA-256 padding, then zeros up to MAX_DATA_BYTES (as zk-email's sha256Pad).
-function sha256Pad(message) {
-  const paddedLength = Math.ceil((message.length + 9) / 64) * 64;
-  if (paddedLength > MAX_DATA_BYTES) {
-    throw new CircuitError('DATA_TOO_LONG', `${message.length} signed bytes need ${paddedLength} padded bytes; the circuit takes ${MAX_DATA_BYTES}.`);
-  }
-  const padded = Buffer.alloc(MAX_DATA_BYTES);
-  message.copy(padded);
-  padded[message.length] = 0x80;
-  padded.writeBigUInt64BE(BigInt(message.length * 8), paddedLength - 8);
-  return { padded, paddedLength };
-}
-
-function fieldElement(name, value) {
-  let v;
-  try {
-    v = BigInt(value);
-  } catch {
-    throw new CircuitError('BAD_PUBLIC_INPUT', `${name} is not an integer.`);
-  }
-  if (v < 0n || v >= FIELD) throw new CircuitError('BAD_PUBLIC_INPUT', `${name} is outside the BN254 scalar field.`);
-  return v.toString();
-}
-
-// Circuit input for a Secure QR and the key that signed it. Only the age bit is
-// revealed: gender, PIN code and state stay hidden (docs/THREAT_MODEL.md, A6.1).
-// The signature is not checked here; the circuit checks it.
-export function buildInput(qrText, key, { nullifierSeed, signalHash }) {
-  const qr = decodeSecureQr(qrText);
-  if (qr.version !== 'V2' && qr.version !== 'V5') {
-    throw new CircuitError('UNSUPPORTED_LAYOUT', `The circuit reads the V2/V5 field layout; this code is ${qr.version}.`);
-  }
-  const { padded, paddedLength } = sha256Pad(qr.signedData);
-  const span = paddedLength - qr.photo.offset;
-  if (span > MAX_PHOTO_SPAN) {
-    throw new CircuitError('PHOTO_TOO_LARGE', `The photo and what follows it take ${span} padded bytes; the circuit accepts ${MAX_PHOTO_SPAN}.`);
-  }
-  return {
-    qrDataPadded: Array.from(padded, String),
-    qrDataPaddedLength: String(paddedLength),
-    delimiterIndices: qr.delimiterIndices.map(String),
-    signature: limbs(toBigInt(qr.signature)).map(String),
-    pubKey: limbs(modulusOf(key)).map(String),
-    revealAgeAbove18: '1',
-    revealGender: '0',
-    revealPinCode: '0',
-    revealState: '0',
-    nullifierSeed: fieldElement('nullifierSeed', nullifierSeed),
-    signalHash: fieldElement('signalHash', signalHash),
-  };
-}
+// Circuit input for a Secure QR (its text) and the key that signed it.
+export const buildInput = (qrText, key, publicInputs) => circuitInput(decodeSecureQr(qrText), modulusOf(key), publicInputs);
 
 // ---- Witness, proof, verification -------------------------------------------
 

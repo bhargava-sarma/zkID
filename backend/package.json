@@ -1,22 +1,15 @@
 {
   "name": "zkid-backend",
   "version": "1.0.0",
-  "description": "zkID backend: OCR, credential signing and ZK proof generation",
+  "description": "zkID backend: a health endpoint only; v2 has no server that receives credentials. Also holds the v1 circuits and contracts, and the snarkjs that tools/v1-audit and tools/test-issuer use to prove them.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node --test \"test/*.test.js\"",
     "fetch-circuit": "node circuits/credential-age-proof/fetch_artifacts.js && node circuits/credential-match-proof/fetch_artifacts.js"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.39.0",
-    "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "multer": "^1.4.5-lts.1",
-    "poseidon-lite": "^0.3.0",
-    "snarkjs": "^0.7.3",
-    "tesseract.js": "^5.0.4"
+    "snarkjs": "0.7.6"
   }
 }

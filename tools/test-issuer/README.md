@@ -32,6 +32,5 @@ node verify_credential.js   # 12 independent checks, including tamper controls
 ```
 
 `regenerate_v1_fixtures.js` remakes the v1 proof fixtures in
-`backend/hardhat-deploy/test/fixtures/` and `frontend/src/verify/fixtures/` under a
-key that exists only while it runs. It needs the v1 circuit artifacts
+`backend/hardhat-deploy/test/fixtures/` under a key that exists only while it runs. It needs the v1 circuit artifacts
 (`cd backend && npm run fetch-circuit`).

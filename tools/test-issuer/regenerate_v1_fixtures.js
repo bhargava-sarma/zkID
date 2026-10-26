@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Regenerates the v1 proof fixtures (Hardhat policy tests, frontend proof-code
-// tests) under a fresh TEST key. The key lives only in this process's memory and
+// Regenerates the v1 proof fixtures (Hardhat policy tests) under a fresh TEST
+// key. The key lives only in this process's memory and
 // is discarded on exit, so nobody can sign anything else under it.
 //
 // Needs the v1 circuit artifacts: cd backend && npm run fetch-circuit
@@ -17,7 +17,7 @@ const snarkjs = require(require.resolve('snarkjs', { paths: [BACKEND] }));
 const { buildCircuitInput } = require(path.join(BACKEND, 'circuits/credential-age-proof/gen_input'));
 const { buildMatchInput } = require(path.join(BACKEND, 'circuits/credential-match-proof/gen_input'));
 
-// 18 years before 2026-09-28: the date the Hardhat tests and frontend tests expect.
+// 18 years before 2026-09-28: the date the Hardhat tests expect.
 const CUTOFF = 20080928;
 const PAYLOAD = require('./synthetic-payload.json');
 
@@ -37,7 +37,6 @@ const CIRCUITS = {
 };
 
 const HARDHAT_FIXTURES = path.join(BACKEND, 'hardhat-deploy/test/fixtures');
-const FRONTEND_FIXTURE = path.join(ROOT, 'frontend/src/verify/fixtures/test-signed-proof.json');
 
 const NOTE =
   'SYNTHETIC TEST FIXTURE. Honest proof of tools/test-issuer/synthetic-payload.json (Test User One, DOB 1998-04-12, M), ' +
@@ -79,7 +78,6 @@ async function main() {
   write(path.join(HARDHAT_FIXTURES, 'match-name.json'), { note: `${NOTE} Name claim "${PAYLOAD.name}".`, ...name });
   write(path.join(HARDHAT_FIXTURES, 'match-gender.json'), { note: `${NOTE} Gender claim ${PAYLOAD.gender}.`, ...gender });
   write(path.join(HARDHAT_FIXTURES, 'match-none.json'), { note: `${NOTE} No claims (the policy must reject it).`, ...none });
-  write(FRONTEND_FIXTURE, { note: `${NOTE} Age proof at cutoff ${CUTOFF}.`, issuer_modulus_hex: issuer.modulus_hex, ...age });
 }
 
 main()

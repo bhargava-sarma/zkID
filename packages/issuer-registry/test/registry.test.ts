@@ -82,5 +82,6 @@ test('malformed and duplicate entries are refused', () => {
   const [entry] = testRegistry([freshTestKey()]).keys;
   throwsCode(() => checkRegistry({ production: false, keys: [{ ...entry, notAfter: entry.notBefore }] }), 'BAD_ENTRY');
   throwsCode(() => checkRegistry({ production: false, keys: [{ ...entry, keyHash: '0x12' }] }), 'BAD_ENTRY');
+  throwsCode(() => checkRegistry({ production: false, keys: [{ ...entry, keyHash: (BigInt(entry.keyHash) + 1n).toString() }] }), 'BAD_ENTRY');
   throwsCode(() => checkRegistry({ production: false, keys: [entry, { ...entry, id: 'again' }] }), 'DUPLICATE_KEY');
 });

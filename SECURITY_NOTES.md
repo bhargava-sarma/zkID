@@ -1,8 +1,9 @@
 # Security notes
 
 Known security problems in this repository and what was done about them.
-Checked on 2026-10-20. The v1 code is preserved at tag `v1-mock-issuer-demo`
-(commit `e94fcb5`).
+Checked on 2026-10-20; section 4 updated on 2026-10-26, when the v1 server code
+was removed from this branch. The v1 code is preserved at tag
+`v1-mock-issuer-demo` (commit `e94fcb5`).
 
 ## 1. The v1 demo issuer's private key is public
 
@@ -17,12 +18,12 @@ credentials with it. It was the only issuer the v1 verifier page and the v1
 - Its public half is listed in
   [`security/compromised-keys.json`](security/compromised-keys.json)
   (modulus, SPKI SHA-256, v1 key id). **No trusted-issuer list, registry or
-  contract may ever include it.**
-  [`frontend/src/verify/trustedIssuers.test.js`](frontend/src/verify/trustedIssuers.test.js)
-  fails if it is added to the frontend's list, and the test issuer refuses to
-  use it.
-- The frontend's trusted-issuer list is now empty: no trustworthy issuer exists
-  for v1 credentials.
+  contract may ever include it.** The issuer registry
+  ([`packages/issuer-registry`](packages/issuer-registry/README.md)) refuses it
+  in every registry (`COMPROMISED_KEY`, covered by its tests), and the test
+  issuer refuses to use it.
+- v1's verifier page and its trusted-issuer list are removed from this branch.
+  v2 trusts only UIDAI's Secure QR keys, from the issuer registry.
 - Test keys are generated on demand by
   [`tools/test-issuer`](tools/test-issuer/README.md) and never committed.
   `.gitignore` excludes `*.pem`, `*.key`, `*.p12` and `*.pfx`;
@@ -78,20 +79,30 @@ sound only if at least one of them destroyed their secret.
 
 ## 4. Other v1 problems, not fixed by removing the key
 
-From the overhaul audit. Later phases remove these paths.
+From the overhaul audit. They apply to v1 (the tag and the live v1 site). On
+this branch the code behind them is removed; what replaces it is described in
+[docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 - **The v1 "issuer" is our own server signing OCR output** (`backend/app.js`,
-  `backend/signedcredential.js`). Its signature means "the server read a photo",
-  not that an identity authority attests the data; an edited photo yields a valid
-  credential. On this branch the server signs with a per-process test key that
-  nothing trusts.
+  `backend/signedcredential.js` at the tag). Its signature means "the server
+  read a photo", not that an identity authority attests the data; an edited
+  photo yields a valid credential. *This branch:* the OCR and signing code is
+  removed. v2 proves UIDAI's own signature on the Aadhaar Secure QR.
 - **Name and gender proofs disclose the claim.** The claimed gender and name hash
-  are public signals; a name hash can be dictionary-tested.
+  are public signals; a name hash can be dictionary-tested. *This branch:* no
+  name or gender proofs. The holder app reveals only the age bit (test T6.1).
 - **Proofs are bearer tokens.** No verifier challenge, nullifier, expiry or
-  revocation: a copied proof or QR code verifies for anyone.
+  revocation: a copied proof or QR code verifies for anyone. *This branch:* a
+  proof is bound to one verifier and one expiring challenge, with a
+  per-verifier nullifier (tests T2.1–T2.5, T5.1). A copy of the Secure QR
+  itself still lets anyone prove as its holder (THREAT_MODEL A3.1, A3.3).
 - **Personal data in Supabase and logs.** `/api/upload` and `/api/demo` store the
   plaintext name and an unsalted SHA-256 of the 12-digit Aadhaar number, which
   can be brute-forced quickly. `ocr.js` and `db.js` log names. If a real card was
-  ever uploaded to a deployed v1, those rows hold personal data.
+  ever uploaded to a deployed v1, those rows hold personal data, and only the
+  owner of that Supabase project can delete them. *This branch:* no database
+  and no upload endpoint; the backend serves a health check only.
 - **The server sees the whole card at issuance**, and `/api/issue-credential`
-  returns the raw ID number to the browser.
+  returns the raw ID number to the browser. *This branch:* the QR is read and
+  proved on the holder's device, and only the proof is sent (test T6.3, an
+  end-to-end run that inspects every request the browser makes).
