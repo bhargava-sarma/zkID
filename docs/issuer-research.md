@@ -2,7 +2,8 @@
 
 What UIDAI actually issues today, whether an "18 or older" proof can be built on
 it in a browser, and what the law says. Written 2026-10-20 for the Phase 1 stop
-gate. Go/no-go is in [section 9](#9-go--no-go).
+gate; updated 2026-10-26 with two downloads of the owner's own code. Go/no-go is
+in [section 9](#9-go--no-go).
 
 **How to read the sources.** Every claim is tagged:
 
@@ -24,7 +25,7 @@ lists what the owner should fetch from an Indian network.
 
 | | Question | Finding | Basis |
 |---|---|---|---|
-| U1 | Secure QR layout | Confirmed on UIDAI-signed codes: decimal integer → big-endian bytes → **gzip** → data; last **256 bytes** are an RSA-2048 **PKCS#1 v1.5 / SHA-256** signature over everything before them; fields separated by **0xFF**; photo is a **JPEG 2000** codestream. V1 (UIDAI's 2019 sample): 16 text fields, photo, 32-byte mobile/email hashes. **Codes downloaded today are V5**: a `V5` prefix, the same 16 fields, a 10-character field 17, the photo, then **27 bytes of unknown purpose**. V2 is described by Anon Aadhaar and was not seen here. | [M] on V1 and on one real V5 code; V2 [S] |
+| U1 | Secure QR layout | Confirmed on UIDAI-signed codes: decimal integer → big-endian bytes → **gzip** → data; last **256 bytes** are an RSA-2048 **PKCS#1 v1.5 / SHA-256** signature over everything before them; fields separated by **0xFF**; photo is a **JPEG 2000** codestream. V1 (UIDAI's 2019 sample): 16 text fields, photo, 32-byte mobile/email hashes. **Codes downloaded today are V5**: a `V5` prefix, the same 16 fields, a 10-character field 17, the photo, then **27 bytes of unknown purpose**. V2 is described by Anon Aadhaar and was not seen here. | [M] on V1 and on two downloads of one holder's V5 code; V2 [S] |
 | U2 | Reference ID | 21 digits: **last 4 digits of the Aadhaar number** + generation time `YYYYMMDDHHMMSSsss` (IST). It changes on every download, so it cannot be nullifier material. | [M] sample (generated 2019-03-08); [P] Regulations 2(bc) mention the last 4 digits |
 | U3 | Certificate and rotation | **Rotated at least three times.** Keys: 2017–2020 ("DS UIDAI 4"); 2021–2024 and 2024–2026 (both "DS UIDAI 05", different keys); **2026–2029 ("DS UIDAI 06")**, which signs codes downloaded today. | [M] UIDAI's sample verifies under the 2017 key and the owner's code under the 2026 key; the 2021 and 2024 certificates [P-copy] via two independent projects; the 2026 one downloaded from UIDAI by the owner |
 | U4 | Offline e-KYC XML | XML-DSig. Not pursued: Secure QR is simpler, and secondary sources say the December 2025 amendment removed XML references from some regulations. In-circuit canonicalisation is avoidable (Anon DigiLocker hashes the signed bytes as they appear), so "impractical" was too strong, but there is no reason to prefer it. | [S] |
@@ -115,7 +116,9 @@ All [M] results come from `spike/secure-qr` (`npm test`, `verify-qr.mjs`).
 
 The owner's code was read from an e-Aadhaar PDF with `read-qr-image.mjs` and
 checked on the owner's machine with `verify-qr.mjs` and `inspect-qr.mjs`. Only
-their output, which holds lengths and kinds and no values, left that machine.
+their output, which holds lengths and kinds and no values, left that machine. A
+second download, on 2026-10-26, has 3,188 digits, 1,324 compressed bytes and
+again 1,176 signed bytes, and verifies under the same key (section 6).
 
 UIDAI's sample is the "official test data" UIDAI published on its QR reader page
 [S: Anon Aadhaar's `scripts/generateTestData.ts`, ref 6]. It was generated on
@@ -263,15 +266,24 @@ What is genuinely left for zkID is the protocol and evidence layer:
 | Whole signed data or signature | no: they contain the reference ID | n/a | rejected |
 | Name + DOB + gender (+ PIN) | yes, unless updated | low: guessable from public data, so nullifiers could be brute-forced and linked | rejected |
 | Last 4 Aadhaar digits | yes | 10⁴ | rejected |
-| **Photo (JPEG 2000 bytes)** | **unverified** | high (~900 bytes of compressed image) | best available; Anon Aadhaar's choice |
+| **Photo (JPEG 2000 bytes)** | **yes, in the one test made**: identical in two downloads 26.8 h apart [M] | high (~900 bytes of compressed image) | best available; Anon Aadhaar's choice |
 
 Known limits of the photo, all of which belong in the threat model:
 
 1. **A photo update gives a new nullifier**, so one more account per site
    (Anon Aadhaar audit, High, no fix) [P, ref 7].
-2. **Byte stability is unverified.** Nothing read here says UIDAI encodes the
-   photo identically on every download. This is what step 1.3 must measure;
-   `spike/secure-qr/compare-downloads.mjs` does it without printing any values.
+2. **Byte stability: one test, passed.** The owner downloaded their e-Aadhaar
+   on 2026-10-25 and again on 2026-10-26 (26.8 hours apart). Per
+   `spike/secure-qr/compare-downloads.mjs`, which prints no values [M]:
+   - identical: every text field, the photo (900 bytes) and the 27 bytes after it;
+   - different: only the reference ID's time and the signature.
+
+   So Anon Aadhaar's nullifier, which hashes the bytes from the photo to the
+   end of the SHA-padded data, is the same for both downloads. This is derived
+   from the byte comparison, not computed in-circuit: the real codes stay on the
+   owner's machine. Not tested: other holders, longer gaps, other sources of the
+   code (Aadhaar app, PVC card, printed letter), or a change in how UIDAI
+   generates codes. Nothing read here says UIDAI promises stable bytes.
 3. **The material is not secret.** The photo bytes sit in a QR code printed on
    every Aadhaar letter, e-Aadhaar and PVC card, which are routinely photocopied
    for hotels, SIM cards and offices. Anyone who has seen a person's code can:
@@ -284,9 +296,9 @@ Known limits of the photo, all of which belong in the threat model:
 4. **On V5 codes the nullifier also covers the 27 bytes after the photo.**
    Anon Aadhaar's photo input runs from the last delimiter to the end of the
    signed data. Changing only those 27 bytes changes the nullifier [M,
-   section 7.4]. If they differ between downloads, the nullifier does too, and
-   G3 fails for current codes. `compare-downloads.mjs` reports them separately
-   ("bytes after photo").
+   section 7.4]. They were identical in the owner's two downloads (limit 2).
+   Their purpose is still unknown, so if UIDAI changes what it puts there,
+   every V5 holder's nullifier changes with it.
 
 ## 7. Cost (measured)
 
@@ -475,7 +487,7 @@ Treat zkID as a **research prototype**: it must not be described as
 ## 9. Go / no-go
 
 **Recommendation: GO on the real issuer (Aadhaar Secure QR), with Phase 3
-redesigned, under three conditions the owner can meet.**
+redesigned. The three conditions below are met, for the one holder tested.**
 
 Why go:
 
@@ -496,14 +508,11 @@ Conditions (open items for the owner, section 10):
    Aadhaar's circuit accepts a code of that shape (section 7.4). It has a
    photo-size limit, and 27 unexplained bytes after the photo feed the
    nullifier.
-3. **Nullifier stability: open.** Run `compare-downloads.mjs` on two downloads
-   made on different days:
-   - if the photo or the 27 bytes after it differ between downloads, Anon
-     Aadhaar's nullifier changes per download, and G3 fails for current codes;
-   - zkID's own circuit (option B) could then hash only the JPEG 2000 bytes, if
-     those prove stable;
-   - if the photo itself changes, the design needs another stable, high-entropy
-     signed field, and none is known.
+3. **Nullifier stability: met for one holder.** Two downloads 26.8 hours apart
+   have identical photo and trailing bytes, so Anon Aadhaar's nullifier is the
+   same for both (section 6, limit 2). One holder and a one-day gap are thin
+   evidence; repeat the comparison, locally, whenever another real code is
+   available.
 
 Redesign Phase 3. Writing "circuit v2" from scratch would mostly re-implement
 Anon Aadhaar's audited circuit with a far weaker setup (zkID v1 had one
@@ -518,12 +527,16 @@ contribution; Anon Aadhaar has 105 plus a beacon). Two options:
   - holder app;
   - attack suite and threat model.
 
-  Its fixed "18+ at QR generation date" check and hour-precision timestamp
-  become documented limitations.
+  Its fixed "18+ at QR generation date" check, hour-precision timestamp and
+  photo-size limit become documented limitations. A verifier-chosen cutoff
+  (brief Phase 3.2; `CUTOFF_TOO_LATE` in Phase 4) is then not possible: only
+  18+.
 - **B.** Write zkID's own circuit only where it changes a property:
   - a verifier-chosen cutoff, e.g. 21+;
   - a coarser freshness output, to reduce linkability through the timestamp;
-  - the key-window check in-circuit.
+  - the key-window check in-circuit;
+  - a photo bound that fits every holder (A rejects photos over 924–987
+    bytes, section 7.4).
 
   B costs about the same constraints (section 7) and needs its own phase-2
   ceremony.
@@ -545,8 +558,9 @@ and the docs must say prominently that no real credential is verified.
 ## 10. Open items for the owner
 
 1. **Certificate.** Done: in `spike/secure-qr/certs/` since 2026-10-25.
-2. **Your QR codes.** First download done (2026-10-25). Download again on another day.
-   Screenshot each QR into `spike/secure-qr/local/` (gitignored), then run:
+2. **Your QR codes.** Done: downloads of 2026-10-25 and 2026-10-26 compared
+   (section 6). To repeat with other codes, screenshot each QR into
+   `spike/secure-qr/local/` (gitignored), then run:
    ```bash
    cd spike/secure-qr && npm install
    node read-qr-image.mjs local/qr-a.png local/a.txt   # QR image -> text, locally
