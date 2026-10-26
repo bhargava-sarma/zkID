@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "predev": "node scripts/prepare-circuit.mjs",
+    "predev": "node scripts/prepare-circuit.mjs && node scripts/prepare-bench.mjs",
     "dev": "vite",
-    "prebuild": "node scripts/prepare-circuit.mjs",
+    "prebuild": "node scripts/prepare-circuit.mjs && node scripts/prepare-bench.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test \"src/verify/*.test.js\" \"src/prover/*.test.js\""

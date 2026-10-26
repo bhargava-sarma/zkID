@@ -14,7 +14,7 @@
       "spki_sha256": "7eec85303e0d63ef8811736e4ff15c3e53c357a4e244bf2b6e6fe5bc28e8789f",
       "source": "anon-aadhaar/anon-aadhaar@4dad918761cfb1d7d5ed9918dcd796d0cb23ae82:packages/circuits/assets/uidai_prod_cdup.cer",
       "uidai_name": "uidai_prod_cdup.cer",
-      "evidence": "UIDAI's official sample Secure QR (V1) verifies against this key (spike/secure-qr test)."
+      "evidence": "UIDAI's official sample Secure QR (V1) verifies against this key (packages/secure-qr test)."
     },
     {
       "file": "uidai-ds-05_2021-2024.crt",

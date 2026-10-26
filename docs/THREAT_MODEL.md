@@ -40,7 +40,7 @@ A proof has nine public signals:
 | `pubkeyHash` | output | Poseidon hash of the RSA key that signed the QR | in the registry (`UNTRUSTED_ISSUER`), and `timestamp` inside that key's validity window (`ISSUER_KEY_NOT_VALID`) |
 | `nullifier` | output | hash of `nullifierSeed` and the bytes from the photo to the end of the SHA-padded data | not seen before at this verifier (`NULLIFIER_SEEN`) |
 | `timestamp` | output | QR generation time, rounded down to the hour (IST), as Unix time | not older than the request's `maxAge` (`CREDENTIAL_TOO_OLD`) |
-| `ageAbove18` | output | 1 if the holder was 18 or older on the QR's generation date and the prover revealed it; otherwise 0 | equals 1 (`AGE_NOT_PROVEN`) |
+| `ageAbove18` | output | 1 if the holder's completed age on the QR's generation date was above 18 (that is, from their 19th birthday) and the prover revealed it; otherwise 0 | equals 1 (`AGE_NOT_PROVEN`) |
 | `gender`, `pinCode`, `state` | outputs | 0 unless the prover revealed them | the holder app always sends 0 (A6.1) |
 | `nullifierSeed` | public input | per-verifier value | equals this verifier's seed (`NULLIFIER_SEED_MISMATCH`) |
 | `signalHash` | public input | value the proof commits to | equals the hash of the stored request (`CHALLENGE_MISMATCH`) |
@@ -75,7 +75,7 @@ The brief leaves these open. Phase 4 can revisit them.
 |---|---|---|---|
 | S1 | **Issuer honesty.** UIDAI signs only data it holds for that person, keeps its signing keys secret, and issues one Aadhaar number per person. | Not checkable by zkID. | Forgery (G1) or extra accounts (G3), undetectable. |
 | S2 | **Key authenticity.** The registry's certificates are UIDAI's. | DS 06 (2026–2029): downloaded from UIDAI by the owner, fingerprint matches an independent project's, and the owner's QR verifies under it. Older keys: copies from other projects; all have expired. | A fake key is trusted. |
-| S3 | **Setup.** At least one participant in Anon Aadhaar's v2.0.0 ceremony (105 phase-2 contributions plus a beacon, on the Hermez powers of tau) destroyed their secret. | Contributions read from the proving key. A full `snarkjs zkey verify` against the Hermez file is not done (its download failed in Phase 1); Phase 3 does it. | Proofs can be forged for any statement. |
+| S3 | **Setup.** At least one participant in Anon Aadhaar's v2.0.0 ceremony (105 phase-2 contributions plus a beacon, on the Hermez powers of tau) destroyed their secret. | `snarkjs zkey verify` passes (Phase 3): the pinned proving key matches the circuit rebuilt from source and the Hermez powers of tau, with all 105 contributions and the beacon checked (docs/circuit-spec.md, section 1). This shows the ceremony was carried out as recorded; it cannot show that any participant was honest. | Proofs can be forged for any statement. |
 | S4 | **Circuit correctness.** The published circuit enforces what its source says. | The proving key reproduces from the June 2024 source (Phase 1). PSE audited an earlier commit (`bbdfd9d`, March 2024); later changes were not reviewed here, and zkID does not re-audit. The circuit does not range-check DOB or timestamp digits and relies on UIDAI's formatting (T1.9). | Depends on the flaw. |
 | S5 | **Verifier clock** is accurate to a few minutes. | Assumed. The QR timestamp has one-hour resolution, so freshness is coarse anyway. | Expired challenges or stale QRs accepted, or valid ones rejected. |
 | S6 | **Verifier state.** The verifier binds each request to the session that created it, and durably stores used challenges and seen nullifiers. | The demo relying party must show it. | Replay (G2) or extra accounts (G3). |
@@ -115,7 +115,8 @@ public timestamp is what costs G5.
 So the thesis holds with the two qualifiers of issuer-research section 9: "one
 account per site per credential" fails across a photo update, and "cannot be
 linked across sites" holds only against parties who have not seen the person's
-QR.
+QR. Option A adds a third: "I am 18 or older" can only be proved from the 19th
+birthday, because the circuit's `ageAbove18` means a completed age above 18.
 
 ## 5. Attacks
 
@@ -132,7 +133,7 @@ where a test is listed, the test shows it succeeding.
 | A1.6 | Sign with UIDAI's current key | **No** | assumption S1 | none |
 | A1.7 | Swap the verification key, circuit artifacts or registry | Yes | pinned by SHA-256 at build time | T1.7 |
 | A1.8 | Forge a proof without a valid witness | Yes, under S3 and S9 | Groth16 soundness | none (assumption) |
-| A1.9 | Use a genuine QR of someone under 18, or hide the age bit | Yes | `ageAbove18` must be 1 | T1.10 |
+| A1.9 | Use a genuine QR of someone under 18, or hide the age bit | Yes | `ageAbove18` must be 1, which the circuit outputs only from the 19th birthday | T1.10 |
 | A1.10 | Exploit unusual signed data: a DOB not in `DD-MM-YYYY`, or non-digits | Partly | fails closed when the DOB is not 10 bytes (the circuit checks the delimiter 11 bytes after its start); digits are not range-checked, so this relies on UIDAI's formatting (S4) | T1.8, T1.9 |
 | A2.1 | Submit a captured proof to another verifier | Yes | different `signalHash` and `nullifierSeed` | T2.1, T2.5 |
 | A2.2 | Submit it again to the same verifier | Yes | single-use challenge | T2.2 |
@@ -170,8 +171,9 @@ where a test is listed, the test shows it succeeding.
   QR. Preventing them needs biometrics or liveness.
 - **Full KYC**: address, AML screening, liveness.
 - **Name and gender proofs**: removed.
-- **Ages other than 18.** Under option A the circuit only outputs "18 or older
-  on the QR's generation date".
+- **18-year-olds, and any other cutoff.** Under option A the circuit only
+  outputs "completed age above 18 on the QR's generation date", which becomes
+  true on the 19th birthday. Holders aged 18 cannot prove until then (T1.10).
 - **Hiding the QR's generation hour and the UIDAI key** from verifiers (A5.3,
   A6.3).
 - **Revocation.** Secure QR has none; freshness is the only control.
@@ -191,18 +193,18 @@ where a test is listed, the test shows it succeeding.
 "Phase" is where a test is first implemented; Phase 6 collects them all into
 `docs/ATTACK_REPORT.md`. Synthetic QRs are signed with ephemeral test keys.
 
-| Test | Phase | Input | Expected | Phase 1 evidence |
+| Test | Phase | Input | Expected | Evidence so far |
 |---|---|---|---|---|
 | T1.1 | 4 | valid proof from a QR signed with a fresh key | `UNTRUSTED_ISSUER` | |
-| T1.2 | 3 | one byte changed in each text field, each delimiter, the start, middle and end of the photo, and the trailing bytes | witness generation fails | `check_controls.mjs` (one DOB byte, one photo byte) |
-| T1.3 | 3 | one signature bit changed | witness generation fails | `check_controls.mjs` |
-| T1.4 | 3 | valid signature, another key as input | witness generation fails | `check_controls.mjs` |
+| T1.2 | 3 | one byte changed in each text field, each delimiter, the start, middle and end of the photo, and the trailing bytes | witness generation fails | passes in `packages/circuit` tests; Phase 1: `check_controls.mjs` (one DOB byte, one photo byte) |
+| T1.3 | 3 | one signature bit changed | witness generation fails | passes in `packages/circuit` tests; Phase 1: `check_controls.mjs` |
+| T1.4 | 3 | valid signature, another key as input | witness generation fails | passes in `packages/circuit` tests; Phase 1: `check_controls.mjs` |
 | T1.5 | 4 | production build with a test key in the registry | build fails | |
 | T1.6 | 4 | registry key, `timestamp` outside its validity window | `ISSUER_KEY_NOT_VALID` | |
-| T1.7 | 3 | one byte changed in the wasm, proving key or verification key | rejected on load (SHA-256 mismatch) | |
-| T1.8 | 3 | DOB field of 4 bytes (year only) | witness generation fails | |
-| T1.9 | 3 | DOB of 10 bytes with non-digits | outputs recorded; documents the missing range check | |
-| T1.10 | 3 and 4 | holder under 18; adult with the age flag off | proof valid with `ageAbove18 = 0` (Phase 3); `AGE_NOT_PROVEN` (Phase 4) | `check_controls.mjs` (outputs only) |
+| T1.7 | 3 | one byte changed in the wasm, proving key or verification key | rejected on load (SHA-256 mismatch) | passes in `packages/circuit` tests |
+| T1.8 | 3 | DOB field of 4 bytes (year only) | witness generation fails | passes in `packages/circuit` tests |
+| T1.9 | 3 | DOB of 10 bytes with non-digits | outputs recorded; documents the missing range check | passes in `packages/circuit` tests |
+| T1.10 | 3 and 4 | QR generated the day before, on, and after the holder's 18th and 19th birthdays; an adult with the age flag off | `ageAbove18` is 1 only on and after the 19th birthday (Phase 3); `AGE_NOT_PROVEN` for every 0 (Phase 4) | circuit part passes in `packages/circuit` tests; Phase 1: `check_controls.mjs` (under 18; flag off) |
 | T2.1 | 4 | proof for verifier X sent to verifier Y | `CHALLENGE_MISMATCH` | |
 | T2.2 | 4 | the same proof sent twice to X | second: `CHALLENGE_REUSED` | |
 | T2.3 | 4 | re-randomized copy of an accepted proof | `CHALLENGE_REUSED` | |
@@ -214,21 +216,21 @@ where a test is listed, the test shows it succeeding.
 | T3.3 | 4 | QR older than `maxAge` | `CREDENTIAL_TOO_OLD` | |
 | T3.4 | 6 | same identity, new photo bytes | new nullifier; second account accepted (not defended) | |
 | T3.5 | 4 | QR exactly `maxAge` old, and one hour older | accepted, then `CREDENTIAL_TOO_OLD` | |
-| T4.1 | 3 | two downloads: same photo and trailing bytes, different generation time | equal nullifiers; second account `NULLIFIER_SEEN` | `check_controls.mjs`; the owner's two real downloads, by byte comparison |
+| T4.1 | 3 | two downloads: same photo and trailing bytes, different generation time | equal nullifiers; second account `NULLIFIER_SEEN` | circuit part passes in `packages/circuit` tests; Phase 1: `check_controls.mjs`; the owner's two real downloads, by byte comparison |
 | T4.2 | 6 | the same photo in a V1 layout (64 trailing bytes) and a V5 layout (27) | different nullifiers (documents A4.3) | |
-| T5.1 | 3 | same QR, two verifier ids | different nullifiers | `check_controls.mjs` |
+| T5.1 | 3 | same QR, two verifier ids | different nullifiers | passes in `packages/circuit` tests; Phase 1: `check_controls.mjs` |
 | T5.2 | 6 | only a copy of the QR | its nullifier for any verifier id, computed offline, matches the holder's (documents A5.2) | |
 | T5.3 | 6 | the same QR at two verifiers | identical `timestamp` and `pubkeyHash` (documents A5.3) | |
 | T5.4 | 5 | request served from origin B naming verifier A | holder app refuses | |
 | T6.1 | 5 | every proof the holder app makes | exactly the nine signals of section 1.1; `gender`, `pinCode` and `state` are 0 | |
 | T6.2 | 5 | request asking for gender, PIN code or state | holder app refuses with a typed error | |
 | T6.3 | 5 | full flow under network capture | no request carries the QR digits, its bytes, the photo or any field value | |
-| T7.1 | 3 and 4 | each public signal changed after proving | Groth16 verification fails (Phase 3); `BAD_PROOF` (Phase 4) | |
+| T7.1 | 3 and 4 | each public signal changed after proving | Groth16 verification fails (Phase 3); `BAD_PROOF` (Phase 4) | circuit part passes in `packages/circuit` tests |
 | T7.2 | 4 | each proof element changed | `BAD_PROOF` | |
 | T7.3 | 5 | every signed byte of a synthetic V5 QR flipped, one at a time, in the holder app's parser | signature check fails before proving | |
 | T7.4 | 4 | `verifierId`, challenge or `maxAge` changed after proving | `CHALLENGE_MISMATCH` | |
-| T7.5 | 5 | malformed QR text: not decimal, bad compression, unknown version, truncated | typed parser error | `spike/secure-qr` tests |
-| T7.6 | 3 | delimiter positions shifted | witness generation fails | `check_controls.mjs` (DOB hint) |
+| T7.5 | 5 | malformed QR text: not decimal, bad compression, unknown version, truncated | typed parser error | `packages/secure-qr` tests |
+| T7.6 | 3 | delimiter positions shifted | witness generation fails | passes in `packages/circuit` tests; Phase 1: `check_controls.mjs` (DOB hint) |
 
 `tools/repo-checks/threat_model.test.mjs` checks this document: every goal
 lists a test, every test cited exists in this table, and every test in this

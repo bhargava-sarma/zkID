@@ -15,6 +15,9 @@ tools/test-issuer/.keys/
 tools/test-issuer/out/
 
 # Real or sample Secure QR codes hold personal data: local only, never committed.
+# The old spike path stays ignored: clones from before the move keep their real
+# QR files there (git does not move ignored files).
+packages/secure-qr/local/
 spike/secure-qr/local/
 
 node_modules/
@@ -30,7 +33,11 @@ backend/hardhat-deploy/cache/
 
 # Downloaded on demand
 frontend/public/circuit/
+frontend/public/bench/snarkjs.min.js
 backend/circuits/*.ptau
+# Anon Aadhaar's circuit artifacts (fetch-artifacts.mjs) and setup-check downloads
+packages/circuit/artifacts/
+packages/circuit/setup/work/
 
 # Composed circuit: sources only. Artifacts come from the GitHub release (fetch_artifacts.js).
 backend/circuits/credential-age-proof/*

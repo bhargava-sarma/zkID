@@ -3,7 +3,7 @@
 // personal values: no name, DOB, address, ID digits or photo bytes.
 //
 // Usage: node verify-qr.mjs <file with the QR's decimal text | -> [--cert <pem>...]
-// Keep real QR files in spike/secure-qr/local/ (gitignored). Exit 0 only if a
+// Keep real QR files in packages/secure-qr/local/ (gitignored). Exit 0 only if a
 // certificate verifies, both negative controls are rejected and the layout is known.
 
 import crypto from 'node:crypto';

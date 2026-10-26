@@ -1,4 +1,4 @@
-// Run: npm test (in spike/secure-qr). Every acceptance is paired with rejections.
+// Run: npm test (in packages/secure-qr). Every acceptance is paired with rejections.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';

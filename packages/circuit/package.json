@@ -1,0 +1,17 @@
+{
+  "name": "@zkid/circuit",
+  "private": true,
+  "description": "Anon Aadhaar's published Secure QR circuit (v2.0.0), used unchanged: artifacts pinned by SHA-256, input building, proving and verification.",
+  "type": "module",
+  "main": "index.mjs",
+  "scripts": {
+    "fetch": "node fetch-artifacts.mjs",
+    "test": "node --test \"test/*.test.mjs\"",
+    "bench:node": "node bench/node.mjs",
+    "bench:browser": "node bench/browser.mjs"
+  },
+  "dependencies": {
+    "poseidon-lite": "0.3.0",
+    "snarkjs": "0.7.6"
+  }
+}

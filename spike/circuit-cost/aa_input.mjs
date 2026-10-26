@@ -3,8 +3,8 @@
 // commit 4dad918). Used only to measure proving cost; the data is synthetic.
 
 import crypto from 'node:crypto';
-import { decodeSecureQr } from '../secure-qr/secure-qr.mjs';
-import { makeSyntheticSecureQr } from '../secure-qr/synthetic.mjs';
+import { decodeSecureQr } from '../../packages/secure-qr/secure-qr.mjs';
+import { makeSyntheticSecureQr } from '../../packages/secure-qr/synthetic.mjs';
 
 export const MAX_DATA_BYTES = 512 * 3;
 

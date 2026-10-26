@@ -100,7 +100,7 @@ which only matter if the input is Secure QR.
 
 ## 3. Secure QR in detail
 
-All [M] results come from `spike/secure-qr` (`npm test`, `verify-qr.mjs`).
+All [M] results come from `packages/secure-qr` (`npm test`, `verify-qr.mjs`).
 
 ### 3.1 Encoding and signature
 
@@ -171,7 +171,7 @@ indirect evidence only.
 | `uidai-ds-05_2024-2026` | DS Unique Identification Authority of India 05 | (n)Code Solutions Sub-CA for DSC 2022 | 2024-02-21 → 2026-02-16 | `91ddf442fcce4ff0` | Anon Aadhaar's SDK accepts it [S] |
 | `uidai-ds-06_2026-2029` | DS Unique Identification Authority of India 06 | (n)Code Solutions Sub-CA for DSC 2022 | 2026-02-03 → 2029-02-03 | `5e74a86a0ce6ff94` | Downloaded from UIDAI by the owner; the owner's code verifies under it [M] |
 
-Files, fingerprints and provenance: `spike/secure-qr/certs/registry.json`.
+Files, fingerprints and provenance: `packages/secure-qr/certs/registry.json`.
 
 - The first three were not cross-checked against uidai.gov.in.
 - A second, independent project, `itxshakil/aadhaar-offline`
@@ -225,7 +225,9 @@ browser [P, ref 6]. What it does:
 - **Outputs**: Poseidon hash of the key, nullifier, timestamp, and
   `ageAbove18`, gender, PIN code and state (each 0 unless revealed).
   `ageAbove18` is computed against the code's generation date, not today: "User
-  can generate fresh QR for accuracy" (comment in `extractor.circom`).
+  can generate fresh QR for accuracy" (comment in `extractor.circom`). It is 1
+  only when the completed age is above 18 (`GreaterThan(age, 18)`), so from the
+  19th birthday [M, Phase 3: `packages/circuit` tests, T1.10].
 - **Trusted setup**: the published v2.0.0 proving key (612 MB) has **105 phase-2
   contributions plus a beacon** [M, read from the zkey].
 - **Licence**: MIT (as are zk-email's circuits). circomlib, which it and zkID v1
@@ -274,7 +276,7 @@ Known limits of the photo, all of which belong in the threat model:
    (Anon Aadhaar audit, High, no fix) [P, ref 7].
 2. **Byte stability: one test, passed.** The owner downloaded their e-Aadhaar
    on 2026-10-25 and again on 2026-10-26 (26.8 hours apart). Per
-   `spike/secure-qr/compare-downloads.mjs`, which prints no values [M]:
+   `packages/secure-qr/compare-downloads.mjs`, which prints no values [M]:
    - identical: every text field, the photo (900 bytes) and the 27 bytes after it;
    - different: only the reference ID's time and the signature.
 
@@ -343,8 +345,11 @@ These are desktop-class numbers on a modest CPU, not a laptop or phone.
   release, and size doubles per power.
 - **Reproducibility of Anon Aadhaar's key.** The published proving key matches
   its June 2024 source when built with circom 2.1.9 and @zk-email/circuits 6.1.1
-  [M, `results/anon-aadhaar-repro.txt`]. A full `snarkjs zkey verify` still needs
-  the Hermez powers of tau.
+  [M, `results/anon-aadhaar-repro.txt`]. In Phase 3, `snarkjs zkey verify`
+  against that build and the Hermez 2^20 powers of tau passed, contributions and
+  beacon included [M, `packages/circuit/setup/zkey-verify.txt`]. The original
+  Hermez and Google Cloud hosts now deny access; the file came from the host the
+  snarkjs README links, checked against the BLAKE2b hash the README gives.
 
 ### 7.2 Proving time and memory
 
@@ -380,6 +385,7 @@ Checked on synthetic data by witness generation [M, `check_controls.mjs`,
 | one signature bit changed; signature checked under another key | rejected (RSA check) |
 | DOB delimiter hint off by one | rejected (delimiter assertion) |
 | **holder under 18** | **accepted**, `ageAbove18 = 0` |
+| holder aged 18, before their 19th birthday (Phase 3) | accepted, `ageAbove18 = 0` |
 | adult with `revealAgeAbove18 = 0` | accepted, `ageAbove18 = 0` |
 | same photo, re-downloaded, same seed | same nullifier; different timestamp |
 | same code, other seed | different nullifier |
@@ -527,10 +533,10 @@ contribution; Anon Aadhaar has 105 plus a beacon). Two options:
   - holder app;
   - attack suite and threat model.
 
-  Its fixed "18+ at QR generation date" check, hour-precision timestamp and
-  photo-size limit become documented limitations. A verifier-chosen cutoff
-  (brief Phase 3.2; `CUTOFF_TOO_LATE` in Phase 4) is then not possible: only
-  18+.
+  Its fixed age check (completed age above 18 at QR generation, so 19 or
+  older; section 7.3), hour-precision timestamp and photo-size limit become
+  documented limitations. A verifier-chosen cutoff (brief Phase 3.2;
+  `CUTOFF_TOO_LATE` in Phase 4) is then not possible.
 - **B.** Write zkID's own circuit only where it changes a property:
   - a verifier-chosen cutoff, e.g. 21+;
   - a coarser freshness output, to reduce linkability through the timestamp;
@@ -546,7 +552,7 @@ A first, B only if it measurably improves a row of the attack report.
 `docs/THREAT_MODEL.md`.
 
 **Fallback** if the conditions cannot be met: keep the issuer pluggable and use
-`spike/secure-qr/synthetic.mjs` as a format-faithful **test** issuer (V2 or V5
+`packages/secure-qr/synthetic.mjs` as a format-faithful **test** issuer (V2 or V5
 layout, gzip, RSA-2048, ephemeral key). The rest of the protocol stays intact,
 and the docs must say prominently that no real credential is verified.
 
@@ -559,12 +565,12 @@ and the docs must say prominently that no real credential is verified.
 
 ## 10. Open items for the owner
 
-1. **Certificate.** Done: in `spike/secure-qr/certs/` since 2026-10-25.
+1. **Certificate.** Done: in `packages/secure-qr/certs/` since 2026-10-25.
 2. **Your QR codes.** Done: downloads of 2026-10-25 and 2026-10-26 compared
    (section 6). To repeat with other codes, screenshot each QR into
-   `spike/secure-qr/local/` (gitignored), then run:
+   `packages/secure-qr/local/` (gitignored), then run:
    ```bash
-   cd spike/secure-qr && npm install
+   cd packages/secure-qr && npm install
    node read-qr-image.mjs local/qr-a.png local/a.txt   # QR image -> text, locally
    node verify-qr.mjs local/a.txt
    node compare-downloads.mjs local/a.txt local/b.txt

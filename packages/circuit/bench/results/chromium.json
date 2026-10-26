@@ -1,0 +1,87 @@
+{
+  "when": "2026-10-26T11:04:46.777Z",
+  "machine": {
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "cores": 4,
+    "memGB": 16
+  },
+  "browser": "Chromium 141.0.7390.37 (headless)",
+  "note": "The phone benchmark page: artifacts downloaded from Anon Aadhaar host, proving key from its 10 gzip parts, proving in a Web Worker.",
+  "runs": [
+    {
+      "when": "2026-10-26T11:02:43.099Z",
+      "totalMs": 66871,
+      "mainThreadJsHeapMB": 10,
+      "hashesChecked": true,
+      "stages": {
+        "wasm": {
+          "ms": 1858,
+          "mb": 10.5
+        },
+        "provingKey": {
+          "ms": 16862,
+          "downloadedMb": 295.9,
+          "mb": 612.1
+        },
+        "prove": {
+          "ms": 48068
+        },
+        "verify": {
+          "ms": 23,
+          "valid": true
+        }
+      },
+      "peakChromiumRssMB": 4880
+    },
+    {
+      "when": "2026-10-26T11:03:42.875Z",
+      "totalMs": 59389,
+      "mainThreadJsHeapMB": 10,
+      "hashesChecked": true,
+      "stages": {
+        "wasm": {
+          "ms": 1885,
+          "mb": 10.5
+        },
+        "provingKey": {
+          "ms": 13096,
+          "downloadedMb": 295.9,
+          "mb": 612.1
+        },
+        "prove": {
+          "ms": 44335
+        },
+        "verify": {
+          "ms": 20,
+          "valid": true
+        }
+      },
+      "peakChromiumRssMB": 4735
+    },
+    {
+      "when": "2026-10-26T11:04:46.452Z",
+      "totalMs": 63238,
+      "mainThreadJsHeapMB": 10,
+      "hashesChecked": true,
+      "stages": {
+        "wasm": {
+          "ms": 1839,
+          "mb": 10.5
+        },
+        "provingKey": {
+          "ms": 17885,
+          "downloadedMb": 295.9,
+          "mb": 612.1
+        },
+        "prove": {
+          "ms": 43450
+        },
+        "verify": {
+          "ms": 23,
+          "valid": true
+        }
+      },
+      "peakChromiumRssMB": 4841
+    }
+  ]
+}

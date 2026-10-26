@@ -69,6 +69,13 @@ here). Whoever
 made that contribution could forge proofs for these circuits if they kept its
 randomness. This is acceptable for a demo; it is not "trustless".
 
+v2 does not use these keys. It uses Anon Aadhaar's published proving key (105
+phase-2 contributions and a beacon). `snarkjs zkey verify` against the circuit
+rebuilt from source and the Hermez powers of tau passes
+([docs/circuit-spec.md](docs/circuit-spec.md), section 1). That shows the
+ceremony ran as recorded, not that any participant was honest; proofs stay
+sound only if at least one of them destroyed their secret.
+
 ## 4. Other v1 problems, not fixed by removing the key
 
 From the overhaul audit. Later phases remove these paths.

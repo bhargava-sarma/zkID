@@ -4,7 +4,7 @@
 // values, so its output can be shared.
 //
 // Usage: node compare-downloads.mjs <qrA.txt> <qrB.txt> [--cert <file>...]
-// Keep the inputs in spike/secure-qr/local/ (gitignored).
+// Keep the inputs in packages/secure-qr/local/ (gitignored).
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';

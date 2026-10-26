@@ -14,8 +14,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as snarkjs from 'snarkjs';
 import { anonAadhaarInput } from './aa_input.mjs';
-import { decodeSecureQr } from '../secure-qr/secure-qr.mjs';
-import { makeSyntheticSecureQr, syntheticFields, syntheticPhoto, unknownTrailer } from '../secure-qr/synthetic.mjs';
+import { decodeSecureQr } from '../../packages/secure-qr/secure-qr.mjs';
+import { makeSyntheticSecureQr, syntheticFields, syntheticPhoto, unknownTrailer } from '../../packages/secure-qr/synthetic.mjs';
 
 const wasm = path.join(process.env.AA_ARTIFACTS ?? '', 'aadhaar-verifier.wasm');
 if (!fs.existsSync(wasm)) throw new Error('Set AA_ARTIFACTS to the directory holding aadhaar-verifier.wasm.');
