@@ -29,7 +29,9 @@ and a demo website.
 
 It does not learn the name, date of birth, gender, address, Aadhaar number or
 photo. [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) lists every attack
-considered, which are defended and which are not, and the test for each.
+considered, which are defended and which are not, and the test for each;
+[docs/ATTACK_REPORT.md](docs/ATTACK_REPORT.md) is generated from a run of those
+tests.
 
 ## Limits
 
@@ -43,9 +45,10 @@ considered, which are defended and which are not, and the test for each.
   memory ([docs/circuit-spec.md](docs/circuit-spec.md), section 5).
 - **Not every holder can prove:** photos above 924–987 bytes do not fit the
   circuit, and the date of birth must be `DD-MM-YYYY`.
-- **The nullifier comes from the photo bytes.** Two downloads of one e-Aadhaar,
-  a day apart, gave the same photo bytes; a new photo gives a new nullifier,
-  so a second account at the same site.
+- **The nullifier comes from the photo, the bytes after it, and the length of
+  the signed data.** Two downloads of one e-Aadhaar, a day apart, matched in
+  all three. A new photo, or an update that changes a field's length (a new
+  address, say), gives a new nullifier, so a second account at the same site.
 - **Research prototype.** Whether a website needs UIDAI's permission to use
   Secure QR this way is unsettled ([docs/issuer-research.md](docs/issuer-research.md),
   section 8).
@@ -77,7 +80,8 @@ packages/issuer-registry/  UIDAI's keys with validity windows; refuses test and 
 packages/verifier-sdk/     createRequest and verify, with typed failure codes (TypeScript)
 frontend/                  The holder app (src/App.jsx, src/holder/), and the phone benchmark page (public/bench/)
 apps/demo-rp/              Demo website: request, request QR, verify, one account per nullifier; end-to-end test
-docs/                      Issuer research, threat model, circuit specification
+attack-suite/              Tests of the attacks zkID does not defend; generates docs/ATTACK_REPORT.md
+docs/                      Issuer research, threat model, attack report, circuit specification
 backend/                   A health endpoint, plus the v1 circuits and contracts (all retired)
 tools/                     Test issuer (TEST keys only), v1 audit scripts, repository checks
 spike/                     Phase 1 measurements
@@ -93,7 +97,7 @@ See [apps/demo-rp/README.md](apps/demo-rp/README.md): a local holder app, two
 demo websites, and a synthetic QR signed by a TEST key generated on your
 machine. Real QRs are never needed, and must never be committed.
 
-## Tests
+## Tests and the attack suite
 
 ```bash
 (cd packages/secure-qr && npm test)         # parser, signature, synthetic codes, browser decoder
@@ -102,12 +106,18 @@ machine. Real QRs are never needed, and must never be committed.
 (cd packages/verifier-sdk && npm test)      # every failure code, with real proofs
 (cd frontend && npm test)                   # holder app: request and QR checks, circuit input
 (cd apps/demo-rp && npm run test:e2e)       # three proofs in headless Chromium, network capture
+(cd attack-suite && npm test)               # the attacks zkID does not defend, shown working
+node attack-suite/report.mjs                # all of the above that the threat model cites -> docs/ATTACK_REPORT.md
 node --test "tools/repo-checks/*.test.mjs"  # no private key tracked; threat model consistent
 (cd backend/hardhat-deploy && npm test)     # v1 ZkIdPolicy, kept until the chain decision
 ```
 
 Run `npm install` in a package first. Several packages import
-`packages/circuit`, so install it too.
+`packages/circuit`, so install it too. The end-to-end test needs Chromium
+(`cd apps/demo-rp && npx playwright install chromium`). CI
+([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs all of it, and fails
+if the committed attack report differs from the one its run generates.
+[attack-suite/README.md](attack-suite/README.md) has the details.
 
 ## v1 on Ethereum Sepolia (RETIRED)
 

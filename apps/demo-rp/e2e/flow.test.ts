@@ -9,8 +9,8 @@
 //     second account at the same verifier is refused (NULLIFIER_SEEN).
 //
 // Run: npm run test:e2e (builds the holder app in demo mode first; downloads
-// the circuit artifacts from Anon Aadhaar's host once). PLAYWRIGHT=<path to
-// playwright> if it is not resolvable from here.
+// the circuit artifacts from Anon Aadhaar's host once). Needs Chromium:
+// npx playwright install chromium. PLAYWRIGHT=<path> uses another Playwright.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';

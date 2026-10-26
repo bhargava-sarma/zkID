@@ -5,10 +5,10 @@ Phase 2 of the v2 overhaul. It covers the design the owner chose at stop gate 1
 zkID's request protocol, verifier SDK, issuer registry and holder app around it
 ([issuer-research.md](issuer-research.md), section 9).
 
-**Status: a plan.** Phases 3–6 build what this describes, so every "Yes" below
-is a design claim until its test passes. Phase 6 generates
-`docs/ATTACK_REPORT.md` from the tests. Where Phase 1 already showed something
-on synthetic data, section 7 says so.
+**Status:** every test in section 7 exists and passes. Phase 6 added the tests
+that show the undefended attacks succeeding, and
+[ATTACK_REPORT.md](ATTACK_REPORT.md) is generated from a run of all of them
+(`attack-suite/report.mjs`). Phase 6 also found attack A4.6.
 
 ## 1. System
 
@@ -104,7 +104,7 @@ From the brief:
 |---|---|---|---|
 | G1 Unforgeability | **Yes**, under S1–S4 | SHA-256 and RSA over all signed bytes in-circuit; key hash in the registry; timestamp inside the key's window; pinned artifacts | T1.1–T1.10, T7.1–T7.3, T7.5, T7.6 |
 | G2 Verifier binding | **Yes** for replay; **No** for live relay (A2.5) | `signalHash` is a hash of the request; challenges are single-use and short-lived | T2.1–T2.6, T7.4 |
-| G3 Per-verifier uniqueness | **Partly** | per-verifier `nullifierSeed`; nullifier from the photo bytes. Fails on a photo update, possibly on QRs from other sources, and against anyone who holds the QR | T2.5, T3.1, T3.2, T3.4, T4.1, T4.2, T5.1, T5.2, T5.4 |
+| G3 Per-verifier uniqueness | **Partly** | per-verifier `nullifierSeed`; nullifier from the photo bytes, the bytes after them and the signed data's length. Fails on a photo update, on any update that changes the signed data's length, possibly on QRs from other sources, and against anyone who holds the QR | T2.5, T3.1, T3.2, T3.4, T4.1–T4.3, T5.1, T5.2, T5.4 |
 | G4 Freshness | **Yes**, to the hour | the SDK compares the public `timestamp` with the request's `maxAge` | T3.3, T3.5 |
 | G5 Minimal disclosure | **Partly**: the QR's generation hour and the UIDAI key are also revealed | the holder app sets only the age reveal flag | T1.10, T5.3, T6.1, T6.2 |
 | G6 Client-side only | **Yes**, under S7 | the holder app proves locally and sends only the proof | T6.3 |
@@ -114,14 +114,16 @@ Under option A the SDK makes the same check on a public timestamp, and that
 public timestamp is what costs G5.
 
 So the thesis holds with the two qualifiers of issuer-research section 9: "one
-account per site per credential" fails across a photo update, and "cannot be
-linked across sites" holds only against parties who have not seen the person's
-QR. Option A adds a third: "I am 18 or older" can only be proved from the 19th
-birthday, because the circuit's `ageAbove18` means a completed age above 18.
+account per site per credential" fails across a photo update (and, Phase 6
+found, across any update that changes the signed data's length, A4.6), and
+"cannot be linked across sites" holds only against parties who have not seen
+the person's QR. Option A adds a third: "I am 18 or older" can only be proved
+from the 19th birthday, because the circuit's `ageAbove18` means a completed
+age above 18.
 
 ## 5. Attacks
 
-"Yes" means the planned mechanism rejects the attack. **No** means it succeeds;
+"Yes" means the mechanism rejects the attack. **No** means it succeeds;
 where a test is listed, the test shows it succeeding.
 
 | | Attack | Defended? | Mechanism | Tests |
@@ -147,9 +149,10 @@ where a test is listed, the test shows it succeeding.
 | A3.4 | Update the photo to get another slot | **No** | a new photo gives a new nullifier (Anon Aadhaar audit, High, no fix) | T3.4 |
 | A4.1 | Re-download the QR for a second account | Yes, for the one holder tested (S8) | the same photo and trailing bytes give the same nullifier | T4.1 |
 | A4.2 | Prove under a different `nullifierSeed` | Yes | the SDK requires its own seed | T2.5 |
-| A4.3 | Use QRs from other sources or format versions | Partly | unknown whether a PVC card or the Aadhaar app carries the same bytes; a V1 code (64 trailing bytes) gives a different nullifier than a V5 code (27); freshness rejects old letters | T4.2, T3.3 |
+| A4.3 | Use QRs from other sources or format versions | Partly | unknown whether a PVC card or the Aadhaar app carries the same bytes; a code with V1's 64 bytes after the photo gives a different nullifier than one with V5's 27, and a V1 code cannot be proved at all; freshness rejects old letters | T4.2, T3.3 |
 | A4.4 | Update the photo | **No** | as A3.4 | T3.4 |
 | A4.5 | Hold two Aadhaar numbers | **No** | relies on UIDAI's de-duplication (S1) | none |
+| A4.6 | Change the length of any signed field, e.g. by an address update, for another slot | **No** | the nullifier covers the SHA-256 padding after the photo, which encodes the signed data's length (found in Phase 6) | T4.3 |
 | A5.1 | Compare nullifiers across sites | Yes, against parties without the QR | different seeds; the photo's ~900 bytes cannot be guessed | T5.1 |
 | A5.2 | Compute someone's nullifier for every site from their QR (anyone with a copy, or UIDAI) | **No** | the photo is not secret | T5.2 |
 | A5.3 | Match the QR's generation hour and key hash across sites | **No** under option A | both are public outputs; a holder who uses a separate fresh QR per site avoids matching hours | T5.3 |
@@ -193,12 +196,13 @@ where a test is listed, the test shows it succeeding.
 - **Legal clearance.** Whether a verifier must register with UIDAI is unsettled
   (issuer-research, section 8). This is a research prototype.
 
-## 7. Planned tests
+## 7. Tests
 
-"Phase" is where a test is first implemented; Phase 6 collects them all into
-`docs/ATTACK_REPORT.md`. Synthetic QRs are signed with ephemeral test keys.
+"Phase" is where a test was first implemented; `attack-suite/report.mjs` runs
+them all and writes [ATTACK_REPORT.md](ATTACK_REPORT.md). Synthetic QRs are
+signed with ephemeral test keys.
 
-| Test | Phase | Input | Expected | Evidence so far |
+| Test | Phase | Input | Expected | Evidence |
 |---|---|---|---|---|
 | T1.1 | 4 | valid proof from a QR signed with a fresh key | `UNTRUSTED_ISSUER` | passes in `packages/verifier-sdk` tests |
 | T1.2 | 3 | one byte changed in each text field, each delimiter, the start, middle and end of the photo, and the trailing bytes | witness generation fails | passes in `packages/circuit` tests; Phase 1: `check_controls.mjs` (one DOB byte, one photo byte) |
@@ -215,17 +219,18 @@ where a test is listed, the test shows it succeeding.
 | T2.3 | 4 | re-randomized copy of an accepted proof | `CHALLENGE_REUSED` | passes in `packages/verifier-sdk` tests |
 | T2.4 | 4 | proof sent after the request expired | `CHALLENGE_EXPIRED` | passes in `packages/verifier-sdk` tests |
 | T2.5 | 4 | proof under another `nullifierSeed` | `NULLIFIER_SEED_MISMATCH` | passes in `packages/verifier-sdk` tests |
-| T2.6 | 6 | request from the attacker's session, proved by the victim | accepted (not defended) | |
-| T3.1 | 6 | lent QR, first account | accepted (not defended) | |
+| T2.6 | 6 | request from the attacker's session, proved by the victim | accepted (not defended) | passes in `attack-suite` tests |
+| T3.1 | 6 | lent QR, first account | accepted (not defended); the QR's owner is then `NULLIFIER_SEEN` | passes in `attack-suite` tests |
 | T3.2 | 4 | lent QR, second account at the same site | `NULLIFIER_SEEN` | passes in `packages/verifier-sdk` tests |
 | T3.3 | 4 | QR older than `maxAge` | `CREDENTIAL_TOO_OLD` | passes in `packages/verifier-sdk` tests |
-| T3.4 | 6 | same identity, new photo bytes | new nullifier; second account accepted (not defended) | |
+| T3.4 | 6 | same identity, new photo bytes | new nullifier; second account accepted (not defended) | passes in `attack-suite` tests |
 | T3.5 | 4 | QR exactly `maxAge` old, and one hour older | accepted, then `CREDENTIAL_TOO_OLD` | passes in `packages/verifier-sdk` tests |
 | T4.1 | 3 | two downloads: same photo and trailing bytes, different generation time | equal nullifiers; second account `NULLIFIER_SEEN` | passes in `packages/circuit` and `packages/verifier-sdk` tests; Phase 1: `check_controls.mjs`; the owner's two real downloads, by byte comparison |
-| T4.2 | 6 | the same photo in a V1 layout (64 trailing bytes) and a V5 layout (27) | different nullifiers (documents A4.3) | |
+| T4.2 | 6 | the same photo followed by V1's 64 bytes (in a V2-layout code, as in Anon Aadhaar's V2 test data) and by V5's 27; a V1 code | different nullifiers (documents A4.3); the V1 code is refused (`UNSUPPORTED_LAYOUT`) | passes in `attack-suite` tests |
+| T4.3 | 6 | same photo and trailing bytes; one field one byte longer, then one changed without changing its length | new nullifier and a second account accepted (documents A4.6); the same nullifier | passes in `attack-suite` tests |
 | T5.1 | 3 | same QR, two verifier ids | different nullifiers | passes in `packages/circuit` tests; Phase 1: `check_controls.mjs` |
-| T5.2 | 6 | only a copy of the QR | its nullifier for any verifier id, computed offline, matches the holder's (documents A5.2) | |
-| T5.3 | 6 | the same QR at two verifiers | identical `timestamp` and `pubkeyHash` (documents A5.3) | |
+| T5.2 | 6 | only a copy of the QR | its nullifier for any verifier id, computed offline, matches the holder's (documents A5.2) | passes in `attack-suite` tests (computed with the circuit's witness generator) |
+| T5.3 | 6 | the same QR at two verifiers | identical `timestamp` and `pubkeyHash` (documents A5.3) | passes in `attack-suite` tests |
 | T5.4 | 5 | request served from origin B naming verifier A | holder app refuses | passes in `frontend/src/holder` tests (`WRONG_ORIGIN`) |
 | T6.1 | 5 | every proof the holder app makes | exactly the nine signals of section 1.1; `gender`, `pinCode` and `state` are 0 | passes in `frontend/src/holder` tests (the circuit input) and the `apps/demo-rp` end-to-end test (every proof posted) |
 | T6.2 | 5 | request asking for gender, PIN code or state | holder app refuses with a typed error | passes in `frontend/src/holder` tests (`UNSUPPORTED_REQUEST`) |

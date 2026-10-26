@@ -1,0 +1,72 @@
+# Every test suite, the end-to-end test in Chromium, and the attack report.
+# The report step fails if any test fails, and the next step fails if the
+# committed docs/ATTACK_REPORT.md differs from what this run generated.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, v2/overhaul]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: |
+          for dir in packages/secure-qr packages/circuit packages/issuer-registry packages/verifier-sdk \
+                     frontend apps/demo-rp attack-suite backend/hardhat-deploy; do
+            (cd "$dir" && npm ci --no-audit --no-fund)
+          done
+
+      # Anon Aadhaar's circuit files (623 MB), checked against artifacts.json.
+      - uses: actions/cache@v4
+        with:
+          path: packages/circuit/artifacts
+          key: circuit-artifacts-${{ hashFiles('packages/circuit/artifacts.json') }}
+      - name: Fetch circuit artifacts
+        run: cd packages/circuit && npm run fetch
+
+      - name: Chromium for the end-to-end test
+        run: cd apps/demo-rp && npx playwright install --with-deps chromium
+
+      - name: Type-check
+        run: |
+          for dir in packages/issuer-registry packages/verifier-sdk apps/demo-rp attack-suite; do
+            (cd "$dir" && npm run typecheck)
+          done
+
+      - name: Production registry has no test or compromised key
+        run: cd packages/issuer-registry && npm run check
+
+      - name: Holder app production build
+        run: cd frontend && npm run build
+
+      - name: Repository checks
+        run: node --test "tools/repo-checks/*.test.mjs"
+
+      - name: Every suite the threat model cites, and the attack report
+        run: node attack-suite/report.mjs
+
+      - name: The committed attack report matches this run
+        run: git ls-files --error-unmatch docs/ATTACK_REPORT.md && git diff --exit-code docs/ATTACK_REPORT.md
+
+      - name: Test issuer
+        run: cd tools/test-issuer && node sign_credential.js && node verify_credential.js
+
+      - name: v1 contracts (Hardhat)
+        run: cd backend/hardhat-deploy && npx hardhat test

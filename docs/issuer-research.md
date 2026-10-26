@@ -301,6 +301,11 @@ Known limits of the photo, all of which belong in the threat model:
    section 7.4]. They were identical in the owner's two downloads (limit 2).
    Their purpose is still unknown, so if UIDAI changes what it puts there,
    every V5 holder's nullifier changes with it.
+5. **The nullifier also depends on the signed data's length** (found in Phase
+   6). The bytes it hashes run on into the SHA-256 padding, which encodes the
+   message length. Any update that changes the length of a text field, such as
+   a new address, gives a new nullifier and so a new account at every site; a
+   change of the same length does not [M, THREAT_MODEL test T4.3].
 
 ## 7. Cost (measured)
 

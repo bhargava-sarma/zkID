@@ -68,7 +68,8 @@ The server logs only "accepted" or "refused" with a failure code.
 
 ```bash
 cd apps/demo-rp
-npm run test:e2e    # PLAYWRIGHT=<path to playwright> if it is not installed here
+npx playwright install chromium   # once
+npm run test:e2e
 ```
 
 It runs the setup, builds the holder app in demo mode, starts verifiers A and

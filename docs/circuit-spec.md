@@ -84,7 +84,9 @@ nullifierSeed, signalHash`.
   `ageAbove18 = age > 18`. **It is 1 only from the 19th birthday** (T1.10).
 - **Nullifier.** `Poseidon(nullifierSeed, Poseidon(p[0..15]), Poseidon(p[16..31]))`,
   where `p` packs 992 bytes from the photo's first byte: the photo, the bytes
-  after it (27 on V5), the SHA-256 padding, then zeros (T4.1, T5.1).
+  after it (27 on V5), the SHA-256 padding, then zeros (T4.1, T5.1). The
+  padding encodes the signed data's length, so a text field that changes
+  length changes the nullifier too (T4.3).
 - **Reveal flags** are constrained to 0 or 1, and each revealed output is
   multiplied by its flag. **`signalHash`** is squared in a constraint, so a
   proof is bound to it.

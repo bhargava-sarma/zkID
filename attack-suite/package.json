@@ -1,0 +1,15 @@
+{
+  "name": "@zkid/attack-suite",
+  "private": true,
+  "description": "zkID's attack suite: the attacks the threat model does not defend, shown working, and docs/ATTACK_REPORT.md generated from a run of every test the threat model cites.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"test/*.test.ts\"",
+    "report": "node report.mjs",
+    "typecheck": "tsc -p ."
+  },
+  "devDependencies": {
+    "@types/node": "22.19.1",
+    "typescript": "5.9.3"
+  }
+}

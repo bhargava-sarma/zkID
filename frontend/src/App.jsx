@@ -19,8 +19,8 @@ function Disclosure({ verifier }) {
         <li>That a QR signed by UIDAI shows you were <strong>19 or older</strong> on the day the QR was generated.</li>
         <li>The hour your QR was generated, and which UIDAI key signed it.</li>
         <li>
-          A code for your account on {verifier}. It is the same every time you prove to this website, and different
-          on every other website.
+          A code for your account on {verifier}. It is the same each time you prove to this website (it can change
+          if your Aadhaar photo or address is updated) and different on every other website.
         </li>
       </ul>
       <h2>What it will not learn</h2>
