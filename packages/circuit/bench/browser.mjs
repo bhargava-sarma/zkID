@@ -3,7 +3,7 @@
 // the same code a phone runs, downloading the artifacts from Anon Aadhaar's host
 // and proving in a Web Worker. Samples the memory of Chromium's processes.
 //
-// Usage: node bench/browser.mjs [runs]   (PLAYWRIGHT=<path> if playwright is not resolvable)
+// Usage: node bench/browser.mjs [runs] [--single-thread]   (PLAYWRIGHT=<path> if playwright is not resolvable)
 // First: node bench/make-phone-bench.mjs, and node ../../frontend/scripts/prepare-bench.mjs
 
 import { execFileSync } from 'node:child_process';
@@ -17,7 +17,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const site = path.join(here, '..', '..', '..', 'frontend', 'public', 'bench');
 const playwright = await import(process.env.PLAYWRIGHT || 'playwright');
 const { chromium } = playwright.chromium ? playwright : playwright.default; // ESM or CommonJS entry
-const runs = Number(process.argv[2] ?? 1);
+const runs = Number(process.argv.slice(2).find((a) => /^\d+$/.test(a)) ?? 1);
+const singleThread = process.argv.includes('--single-thread');
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
@@ -47,6 +48,7 @@ for (let i = 0; i < runs; i++) {
   await page.goto(url);
   let peak = 0;
   const sampler = setInterval(() => (peak = Math.max(peak, ownRssMB())), 250);
+  if (singleThread) await page.check('#single');
   await page.click('#run');
   await page.waitForSelector('#result:not([hidden])', { timeout: 20 * 60 * 1000 });
   clearInterval(sampler);
@@ -65,7 +67,8 @@ const summary = {
   machine: { cpu: os.cpus()[0].model, cores: os.cpus().length, memGB: Math.round(os.totalmem() / 2 ** 30) },
   browser: `Chromium ${version} (headless)`,
   note: 'The phone benchmark page: artifacts downloaded from Anon Aadhaar host, proving key from its 10 gzip parts, proving in a Web Worker.',
+  singleThread,
   runs: results.map(({ device, ...r }) => r),
 };
 fs.mkdirSync(path.join(here, 'results'), { recursive: true });
-fs.writeFileSync(path.join(here, 'results', 'chromium.json'), JSON.stringify(summary, null, 2) + '\n');
+fs.writeFileSync(path.join(here, 'results', singleThread ? 'chromium-single-thread.json' : 'chromium.json'), JSON.stringify(summary, null, 2) + '\n');

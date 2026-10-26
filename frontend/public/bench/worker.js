@@ -4,6 +4,8 @@
 importScripts('snarkjs.min.js');
 
 const stage = (name, extra = {}) => postMessage({ type: 'stage', name, ...extra });
+// worker.js?threads=1: prove without snarkjs's helper threads, which copy buffers.
+const singleThread = new URL(self.location.href).searchParams.get('threads') === '1';
 
 async function sha256Hex(buffer) {
   const digest = await crypto.subtle.digest('SHA-256', buffer);
@@ -61,7 +63,14 @@ async function run() {
 
   stage('proving (witness + proof)');
   t = performance.now();
-  const { proof, publicSignals } = await snarkjs.groth16.fullProve(bench.input, { type: 'mem', data: new Uint8Array(wasm) }, { type: 'mem', data: zkey });
+  const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+    bench.input,
+    { type: 'mem', data: new Uint8Array(wasm) },
+    { type: 'mem', data: zkey },
+    undefined,
+    undefined,
+    { singleThread },
+  );
   report.stages.prove = { ms: Math.round(performance.now() - t) };
 
   stage('verifying');

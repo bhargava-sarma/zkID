@@ -548,7 +548,9 @@ contribution; Anon Aadhaar has 105 plus a beacon). Two options:
   ceremony.
 
 A first, B only if it measurably improves a row of the attack report.
-**Owner's decision (2026-10-26): A.** The threat model for it is in
+**Owner's decision (2026-10-26): A.** At stop gate 3 the owner kept A after
+learning that its age check means 19 or older (section 7.3); that limit is
+documented rather than fixed. The threat model for it is in
 `docs/THREAT_MODEL.md`.
 
 **Fallback** if the conditions cannot be met: keep the issuer pluggable and use

@@ -37,10 +37,11 @@ $('copy').onclick = () => navigator.clipboard?.writeText($('result').textContent
 $('run').onclick = () => {
   $('run').disabled = true;
   const started = performance.now();
-  const worker = new Worker('worker.js');
+  const singleThread = $('single').checked;
+  const worker = new Worker(singleThread ? 'worker.js?threads=1' : 'worker.js');
   worker.onmessage = ({ data }) => {
     if (data.type === 'stage') {
-      storage.set(data.name);
+      storage.set(`${data.name}${singleThread ? ' (single thread)' : ''}`);
       $('status').textContent = `${data.name}… (${Math.round((performance.now() - started) / 1000)} s so far)`;
       return;
     }
@@ -49,10 +50,10 @@ $('run').onclick = () => {
     const jsHeapMB = performance.memory ? Math.round(performance.memory.usedJSHeapSize / 2 ** 20) : null;
     if (data.type === 'done') {
       $('status').textContent = data.report.stages.verify.valid ? 'Done: the proof verified.' : 'Done, but the proof did NOT verify.';
-      show({ when: new Date().toISOString(), device: device(), totalMs, mainThreadJsHeapMB: jsHeapMB, ...data.report });
+      show({ when: new Date().toISOString(), device: device(), singleThread, totalMs, mainThreadJsHeapMB: jsHeapMB, ...data.report });
     } else {
       $('status').textContent = `Failed: ${data.message}`;
-      show({ when: new Date().toISOString(), device: device(), totalMs, error: data.message });
+      show({ when: new Date().toISOString(), device: device(), singleThread, totalMs, error: data.message });
     }
     worker.terminate();
     $('run').disabled = false;

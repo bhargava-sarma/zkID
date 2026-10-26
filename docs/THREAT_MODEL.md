@@ -52,7 +52,8 @@ verifier sees only the outputs.
 
 ### 1.2 Decisions made in this document
 
-The brief leaves these open. Phase 4 can revisit them.
+The brief leaves these open. The owner accepted all four on 2026-10-26; Phases 4
+and 5 implement them.
 
 1. **The verifier id is the verifier's HTTPS origin.** The request QR or link
    holds a URL on that origin. The holder app fetches the request from it and
@@ -171,9 +172,10 @@ where a test is listed, the test shows it succeeding.
   QR. Preventing them needs biometrics or liveness.
 - **Full KYC**: address, AML screening, liveness.
 - **Name and gender proofs**: removed.
-- **18-year-olds, and any other cutoff.** Under option A the circuit only
-  outputs "completed age above 18 on the QR's generation date", which becomes
-  true on the 19th birthday. Holders aged 18 cannot prove until then (T1.10).
+- **18-year-olds, and any other cutoff** (accepted by the owner at stop gate 3,
+  2026-10-26). Under option A the circuit only outputs "completed age above 18
+  on the QR's generation date", which becomes true on the 19th birthday. Holders
+  aged 18 cannot prove until then (T1.10).
 - **Hiding the QR's generation hour and the UIDAI key** from verifiers (A5.3,
   A6.3).
 - **Revocation.** Secure QR has none; freshness is the only control.

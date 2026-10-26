@@ -121,7 +121,9 @@ Measured on a 4-core Intel Xeon container (2.1 GHz, 16 GB), snarkjs 0.7.6:
 | Node: proof | 34.4 s (median of 3; 32.6–36.9 s), peak RSS 3.7 GB |
 | Chromium, desktop, the benchmark page: download and unpack the proving key | 13–18 s for 296 MB from Anon Aadhaar's host, every file SHA-256-checked |
 | Chromium, desktop, the benchmark page: witness + proof in a Web Worker | **44.3 s** (median of 3; 43.5–48.1 s); peak 4.7–4.9 GB across Chromium's processes |
-| Mid-range phone | **not measured yet**: needs the owner's phone, through `frontend/public/bench/` |
+| Chromium, desktop, the page's single-thread option | proving **77.7 s** (2 runs: 77.3, 78.2 s); peak **2.6 GB**, about half |
+| Owner's Android phone, Chrome, default (multi-threaded) | the proving key downloaded and unpacked; then **the tab crashed during proving** ("Aw, Snap!"), most likely out of memory (2026-10-26) |
+| Same phone, single thread | not measured yet |
 
 Raw results: `packages/circuit/bench/results/` (`node.json`, `chromium.json`).
 Phase 1 measured the same artifacts at 3.4 s, 34.4 s and 51.8 s (main thread,
