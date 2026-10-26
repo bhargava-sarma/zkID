@@ -1,0 +1,14 @@
+sha256_bytes_640 O1 compile=28s Wires=330148 Constraints=333524 Private Inputs=641 Public Inputs=0 Outputs=256 
+sha256_bytes_640 O2 compile=25s Wires=312366 Constraints=315741 Private Inputs=641 Public Inputs=0 Outputs=256 
+sha256_bytes_1152 O1 compile=44s Wires=594661 Constraints=600533 Private Inputs=1153 Public Inputs=0 Outputs=256 
+sha256_bytes_1152 O2 compile=46s Wires=562735 Constraints=568606 Private Inputs=1153 Public Inputs=0 Outputs=256 
+sha256_bytes_1536 O1 compile=62s Wires=793045 Constraints=800789 Private Inputs=1537 Public Inputs=0 Outputs=256 
+sha256_bytes_1536 O2 compile=60s Wires=750511 Constraints=758254 Private Inputs=1537 Public Inputs=0 Outputs=256 
+sha256_bytes_2048 O1 compile=79s Wires=1057557 Constraints=1067797 Private Inputs=2049 Public Inputs=0 Outputs=256 
+sha256_bytes_2048 O2 compile=80s Wires=1000879 Constraints=1011118 Private Inputs=2049 Public Inputs=0 Outputs=256 
+rsa_121_17 O1 compile=5s Wires=190035 Constraints=190945 Private Inputs=34 Public Inputs=17 Outputs=0 
+rsa_121_17 O2 compile=7s Wires=185002 Constraints=185903 Private Inputs=34 Public Inputs=17 Outputs=0 
+zkid_v1_age O1 compile=9s Wires=254987 Constraints=256574 Private Inputs=137 Public Inputs=18 Outputs=0 
+zkid_v1_age O2 compile=13s Wires=247306 Constraints=248861 Private Inputs=137 Public Inputs=18 Outputs=0 
+anon_aadhaar_4dad918 O1 compile=71s Wires=1138550 Constraints=1152888 Private Inputs=1593 Public Inputs=2 Outputs=7 
+anon_aadhaar_4dad918 O2 compile=74s Wires=1062542 Constraints=1076870 Private Inputs=1593 Public Inputs=2 Outputs=7 

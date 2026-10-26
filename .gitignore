@@ -5,6 +5,19 @@
 .env.hardhat
 !.env.example
 
+# Key material is never committed. Test keys are generated in memory by the
+# tests; see SECURITY_NOTES.md.
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Real or sample Secure QR codes hold personal data: local only, never committed.
+# The old spike path stays ignored: clones from before the move keep their real
+# QR files there (git does not move ignored files).
+packages/secure-qr/local/
+spike/secure-qr/local/
+
 node_modules/
 dist/
 build/
@@ -12,28 +25,17 @@ build/
 *.log
 .DS_Store
 
-# Hardhat
-backend/hardhat-deploy/artifacts/
-backend/hardhat-deploy/cache/
+# v1 leftovers. Removed from the tree, but older clones may still hold these
+# files, including a private TEST key in tools/test-issuer/.keys/.
+tools/test-issuer/.keys/
+tools/test-issuer/out/
+backend/
+frontend/public/circuit/
 
 # Downloaded on demand
-frontend/public/circuit/
-backend/circuits/*.ptau
-
-# Composed circuit: sources only. Artifacts come from the GitHub release (fetch_artifacts.js).
-backend/circuits/credential-age-proof/*
-!backend/circuits/credential-age-proof/circuits/
-!backend/circuits/credential-age-proof/gen_input.js
-!backend/circuits/credential-age-proof/artifacts.json
-!backend/circuits/credential-age-proof/fetch_artifacts.js
-!backend/circuits/credential-age-proof/package.json
-!backend/circuits/credential-age-proof/package-lock.json
-
-# Name and gender match circuit: same arrangement.
-backend/circuits/credential-match-proof/*
-!backend/circuits/credential-match-proof/circuits/
-!backend/circuits/credential-match-proof/gen_input.js
-!backend/circuits/credential-match-proof/artifacts.json
-!backend/circuits/credential-match-proof/fetch_artifacts.js
-!backend/circuits/credential-match-proof/package.json
-!backend/circuits/credential-match-proof/package-lock.json
+frontend/public/bench/snarkjs.min.js
+# Local demo: an ephemeral test issuer and synthetic QR images (apps/demo-rp/setup-demo.mjs)
+apps/demo-rp/.demo/
+# Anon Aadhaar's circuit artifacts (fetch-artifacts.mjs) and setup-check downloads
+packages/circuit/artifacts/
+packages/circuit/setup/work/

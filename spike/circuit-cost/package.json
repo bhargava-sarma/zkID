@@ -1,0 +1,16 @@
+{
+  "name": "zkid-spike-circuit-cost",
+  "private": true,
+  "description": "Phase 1 spike: measured constraint counts and proving cost for a Secure QR circuit.",
+  "type": "module",
+  "scripts": {
+    "constraints": "bash measure_constraints.sh",
+    "prove:node": "node bench_prove_node.mjs",
+    "prove:browser": "node bench_prove_browser.mjs"
+  },
+  "dependencies": {
+    "@zk-email/circuits": "6.3.4",
+    "circomlib": "2.0.5",
+    "snarkjs": "0.7.6"
+  }
+}
