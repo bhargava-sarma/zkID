@@ -64,6 +64,3 @@ jobs:
 
       - name: The committed attack report matches this run
         run: git ls-files --error-unmatch docs/ATTACK_REPORT.md && git diff --exit-code docs/ATTACK_REPORT.md
-
-      - name: Test issuer
-        run: cd tools/test-issuer && node sign_credential.js && node verify_credential.js

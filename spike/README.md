@@ -19,6 +19,10 @@ AA_ARTIFACTS=<dir> node bench_prove_node.mjs
 AA_ARTIFACTS=<dir> PLAYWRIGHT=<path> node bench_prove_browser.mjs
 ```
 
+`results/prove_node_v1.json` measured v1's circuit with a script that needed
+the v1 tree; it was removed with v1's code (last at commit `666c4a2`).
+`measure_constraints.sh` reads v1's circuit from tag `v1-mock-issuer-demo`.
+
 `<dir>` holds Anon Aadhaar's published v2.0.0 `aadhaar-verifier.wasm`,
 `circuit_final.zkey` and `vkey.json`, from
 `https://anon-aadhaar-artifacts.s3.eu-central-1.amazonaws.com/v2.0.0/`. The

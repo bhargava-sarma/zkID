@@ -47,7 +47,9 @@ never does, and refuses requests that ask (THREAT_MODEL, A6.1).
 
 The holder app reads the QR and proves in the browser; the verifier SDK runs at
 the website; nothing stores an identity attribute. The end-to-end test checks
-that no request carries any part of the QR (THREAT_MODEL, T6.3).
+that no request carries any part of the QR (THREAT_MODEL, T6.3). The holder app
+is static files, so the deployment has no backend; v1's `backend/` went, the
+last of it a health endpoint nothing called.
 
 ## 5. Freshness in the SDK, not the circuit
 
@@ -98,3 +100,11 @@ list and `ethers`, the read-only audit scripts for the v1 deployment
 SECURITY_NOTES), and the README's Sepolia section. Nothing was deployed, and no
 v1 contract is reused. v1's Sepolia contracts stay deployed and retired; their
 addresses and the forgery they accept are in SECURITY_NOTES, section 2.
+
+## 8. v1 code
+
+v1 is reachable only through tag `v1-mock-issuer-demo`. Besides the parts above,
+this branch removed v1's circuits (`backend/circuits`), its test issuer, which
+signed v1's JSON credentials (`tools/test-issuer`), and the Phase 1 spike's v1
+benchmark script. The spike reads v1's circuit from the tag when it compares
+constraint counts.

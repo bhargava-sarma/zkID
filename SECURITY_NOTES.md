@@ -20,13 +20,13 @@ credentials with it. It was the only issuer the v1 verifier page and the v1
   (modulus, SPKI SHA-256, v1 key id). **No trusted-issuer list, registry or
   contract may ever include it.** The issuer registry
   ([`packages/issuer-registry`](packages/issuer-registry/README.md)) refuses it
-  in every registry (`COMPROMISED_KEY`, covered by its tests), and the test
-  issuer refuses to use it.
+  in every registry (`COMPROMISED_KEY`, covered by its tests).
 - v1's verifier page and its trusted-issuer list are removed from this branch.
   v2 trusts only UIDAI's Secure QR keys, from the issuer registry.
-- Test keys are generated on demand by
-  [`tools/test-issuer`](tools/test-issuer/README.md) and never committed.
-  `.gitignore` excludes `*.pem`, `*.key`, `*.p12` and `*.pfx`;
+- Test keys are generated in memory where they are used (the tests and the
+  local demo's setup) and their private halves are never written to disk; v1's
+  test issuer is removed from this branch. `.gitignore`
+  excludes `*.pem`, `*.key`, `*.p12` and `*.pfx`;
   [`tools/repo-checks/no_private_keys.test.mjs`](tools/repo-checks/no_private_keys.test.mjs)
   fails if a tracked file holds a private key.
 
@@ -111,7 +111,7 @@ this branch the code behind them is removed; what replaces it is described in
   can be brute-forced quickly. `ocr.js` and `db.js` log names. If a real card was
   ever uploaded to a deployed v1, those rows hold personal data, and only the
   owner of that Supabase project can delete them. *This branch:* no database
-  and no upload endpoint; the backend serves a health check only.
+  and no upload endpoint; this branch has no server code at all.
 - **The server sees the whole card at issuance**, and `/api/issue-credential`
   returns the raw ID number to the browser. *This branch:* the QR is read and
   proved on the holder's device, and only the proof is sent (test T6.3, an

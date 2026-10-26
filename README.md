@@ -1,59 +1,21 @@
 # zkID
 
-> **Status: v2 in progress on this branch.** v1 (an OCR-based demo with its own
-> "issuer") is preserved at tag `v1-mock-issuer-demo`, and its server code is
-> removed here. v1's only trusted issuer key is public, so its Sepolia
-> contracts and the live v1 site accept forged proofs; see
-> [SECURITY_NOTES.md](SECURITY_NOTES.md).
+Prove to a website that you are 19 or older with your Aadhaar Secure QR,
+without the website receiving the QR or anything in it.
 
-zkID lets a website check that a person is 19 or older from their Aadhaar Secure
-QR (the QR on e-Aadhaar, signed by UIDAI) without receiving the QR or anything
-in it. The person's browser checks UIDAI's signature and makes a zero-knowledge
-proof; the website receives only the proof.
+> **Status: research prototype.** v1 (an OCR-based demo with its own "issuer")
+> is preserved at tag `v1-mock-issuer-demo`. v1's only trusted issuer key is
+> public, so its Sepolia contracts and the live v1 site accept forged proofs;
+> see [SECURITY_NOTES.md](SECURITY_NOTES.md).
 
-The circuit and its proving key are Anon Aadhaar's (by PSE, MIT-licensed),
-used unchanged ([docs/circuit-spec.md](docs/circuit-spec.md)). zkID adds a
-request protocol that binds each proof to one website and one expiring request,
-a per-website nullifier, a registry of UIDAI keys with their validity windows, a
-verifier SDK with typed failure codes, a holder app that proves in the browser,
-and a demo website.
-
-## What a website learns
-
-- That UIDAI signed a QR showing the holder was 19 or older on the day the QR
-  was generated. The circuit's `ageAbove18` output means "completed age above
-  18", which becomes true on the 19th birthday; 18-year-olds cannot prove.
-- The hour the QR was generated, and which UIDAI key signed it.
-- A nullifier: the same for the same QR at the same website (one account per
-  QR per site), different at every other website.
-
-It does not learn the name, date of birth, gender, address, Aadhaar number or
-photo. [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) lists every attack
-considered, which are defended and which are not, and the test for each;
-[docs/ATTACK_REPORT.md](docs/ATTACK_REPORT.md) is generated from a run of those
-tests.
-
-## Limits
-
-- **Anyone with a copy of the QR can prove as its holder.** Nothing binds a
-  proof to the person; preventing lending needs biometrics (THREAT_MODEL
-  A3.1, A3.3).
-- **Freshness is the only revocation.** A website chooses how old a QR it
-  accepts (the demo: 7 days).
-- **Memory.** Proving in a desktop browser takes about 45 s and 5 GB, or about
-  80 s and 2.6 GB on one thread. The one phone tried (8 cores, 8 GB or more)
-  ran out of memory with several threads and proved in 79 s with one; phones
-  with less memory are untested ([docs/circuit-spec.md](docs/circuit-spec.md),
-  section 5).
-- **Not every holder can prove:** photos above 924–987 bytes do not fit the
-  circuit, and the date of birth must be `DD-MM-YYYY`.
-- **The nullifier comes from the photo, the bytes after it, and the length of
-  the signed data.** Two downloads of one e-Aadhaar, a day apart, matched in
-  all three. A new photo, or an update that changes a field's length (a new
-  address, say), gives a new nullifier, so a second account at the same site.
-- **Research prototype.** Whether a website needs UIDAI's permission to use
-  Secure QR this way is unsettled ([docs/issuer-research.md](docs/issuer-research.md),
-  section 8).
+The Secure QR on every e-Aadhaar is signed by UIDAI. zkID's holder app reads it
+on the person's device, checks UIDAI's signature, and makes a zero-knowledge
+proof in the browser; the website receives only the proof. The circuit and its
+proving key are Anon Aadhaar's, used unchanged
+([docs/circuit-spec.md](docs/circuit-spec.md)). zkID adds a request protocol
+that binds each proof to one website and one expiring request, per-website
+nullifiers, a registry of UIDAI keys with their validity windows, a verifier SDK
+with typed failure codes, the holder app, a demo website, and an attack suite.
 
 ## How it works
 
@@ -73,6 +35,88 @@ tests.
    issuer key and its validity window, the age bit, freshness and the
    nullifier, and returns the first failure as a code.
 
+## What a website learns
+
+- That UIDAI signed a QR showing the holder was 19 or older on the day the QR
+  was generated. The circuit's `ageAbove18` output means "completed age above
+  18", which becomes true on the 19th birthday; 18-year-olds cannot prove.
+- The hour the QR was generated, and which UIDAI key signed it.
+- A nullifier: the same for the same QR at the same website (one account per
+  QR per site), different at every other website.
+
+It does not learn the name, date of birth, gender, address, Aadhaar number or
+photo.
+
+## What is defended, and what is not
+
+[docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) lists 40 attacks: 26 defended, 2
+partly, 12 not. [docs/ATTACK_REPORT.md](docs/ATTACK_REPORT.md) is generated from
+a run of the tests for each, including the ones that show the undefended attacks
+working. The ids below are the threat model's.
+
+Defended:
+
+- **Forgery** (A1.1–A1.5, A1.7–A1.9): a QR UIDAI did not sign, one changed in
+  any signed byte, or one showing someone under 19 gives no accepted proof. A
+  key outside the registry, or a QR generated outside its key's validity
+  window, is refused; the circuit files are pinned by SHA-256.
+- **Replay** (A2.1–A2.4): a proof is accepted once, by the website and for the
+  request it was made for, before the request expires. A re-randomized copy is
+  caught too.
+- **A second account with the same QR** at one website (A3.2, A4.1, A4.2),
+  including with a re-downloaded QR, as tested on one holder's two downloads.
+- **Linking by nullifier** across websites, by anyone who has not seen the QR
+  (A5.1, A5.5).
+- **A website asking for more** than the age bit, or for the QR itself (A6.1,
+  A6.2, A6.4).
+- **Tampering** with the proof, its signals, the request or the QR text (A7).
+
+Not defended:
+
+- **Lending and copies** (A3.1, A3.3): anyone with a copy of the QR proves as
+  its holder, and the first to prove at a site takes that site's account.
+  Preventing this needs biometrics.
+- **New accounts after an update** (A3.4, A4.4, A4.6): a new photo, or an
+  update that changes a field's length (a new address, say), gives a new
+  nullifier, so a second account at every site.
+- **Linking by anyone who has the QR** (A5.2), and by the generation hour and
+  key hash that every proof shows (A5.3, A6.3).
+- **A relayed request** (A2.5): whoever forwards a website's live request to
+  you gets the account your proof opens.
+- **UIDAI itself** (A1.6, A4.5): its signing key and its de-duplication are
+  trusted. **Network correlation** (A5.4) is out of scope.
+- **Partly:** a date of birth with unusual characters relies on UIDAI's
+  formatting (A1.10), and QRs from other sources may carry different bytes, so
+  a different nullifier (A4.3).
+
+## Limits
+
+- **19, not 18.** Anon Aadhaar's circuit outputs "completed age above 18"; the
+  owner accepted this rather than change the circuit
+  ([docs/DECISIONS.md](docs/DECISIONS.md), section 2).
+- **Freshness is the only revocation.** A website chooses how old a QR it
+  accepts (the demo: 7 days).
+- **Memory.** Proving in a desktop browser takes about 45 s and 5 GB, or about
+  80 s and 2.6 GB on one thread. The one phone tried (8 cores, 8 GB or more)
+  ran out of memory with several threads and proved in 79 s with one; phones
+  with less memory are untested ([docs/circuit-spec.md](docs/circuit-spec.md),
+  section 5).
+- **Not every holder can prove:** photos above 924–987 bytes do not fit the
+  circuit, and the date of birth must be `DD-MM-YYYY`.
+- **Legal status.** Whether a website needs UIDAI's permission to use Secure QR
+  this way is unsettled ([docs/issuer-research.md](docs/issuer-research.md),
+  section 8).
+
+## Trusted setup
+
+The proving key is Anon Aadhaar's v2.0.0 key: a phase-2 ceremony with 105
+contributions and a random beacon, on the Hermez Powers of Tau (2^20).
+`snarkjs zkey verify` passes against the circuit rebuilt from source
+(`packages/circuit/setup/verify-setup.sh`; circuit-spec, section 1). That shows
+the ceremony ran as recorded, not that its participants were honest: proofs are
+sound if at least one contributor destroyed their secret. zkID adds no setup of
+its own.
+
 ## Layout
 
 ```
@@ -84,8 +128,7 @@ frontend/                  The holder app (src/App.jsx, src/holder/), and the ph
 apps/demo-rp/              Demo website: request, request QR, verify, one account per nullifier; end-to-end test
 attack-suite/              Tests of the attacks zkID does not defend; generates docs/ATTACK_REPORT.md
 docs/                      Issuer research, threat model, attack report, circuit specification, decisions
-backend/                   A health endpoint, and the v1 circuits
-tools/                     Test issuer (TEST keys only), v1 audit scripts, repository checks
+tools/repo-checks/         No private key is tracked; the threat model is consistent
 spike/                     Phase 1 measurements
 security/                  Keys whose private half is public; never trust them
 ```
@@ -116,6 +159,20 @@ Run `npm install` in a package first. Several packages import
 ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs all of it, and fails
 if the committed attack report differs from the one its run generates.
 [attack-suite/README.md](attack-suite/README.md) has the details.
+
+## Prior work
+
+- [Anon Aadhaar](https://github.com/anon-aadhaar/anon-aadhaar) (PSE,
+  MIT-licensed): the circuit, its proving key, the nullifier and the key-hash
+  scheme. RSA verification of UIDAI's signature inside a circuit is theirs.
+- [zk-email's circuits](https://www.npmjs.com/package/@zk-email/circuits)
+  (RSA, SHA-256) and [circomlib](https://github.com/iden3/circomlib) (Poseidon,
+  comparators), which that circuit is built from.
+- [snarkjs](https://github.com/iden3/snarkjs) (Groth16) and the Hermez Powers of
+  Tau; [poseidon-lite](https://www.npmjs.com/package/poseidon-lite) and
+  [jsQR](https://github.com/cozmo/jsQR) in the holder app.
+- UIDAI's Secure QR format and public certificates
+  ([docs/issuer-research.md](docs/issuer-research.md)).
 
 ## v1
 

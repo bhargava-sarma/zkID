@@ -6,10 +6,12 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 ANON_AADHAAR="${ANON_AADHAAR:-/home/user/anon-aadhaar/anon-aadhaar}"
-V1_AGE="../../backend/circuits/credential-age-proof/circuits/credential_age_proof.circom"
 OUT=results
 BUILD="${BUILD:-build}"
 mkdir -p "$OUT" "$BUILD"
+# v1's age circuit, for comparison. v1 is only in the tag now.
+V1_AGE="$BUILD/credential_age_proof.circom"
+git show v1-mock-issuer-demo:backend/circuits/credential-age-proof/circuits/credential_age_proof.circom > "$V1_AGE"
 
 circuits=(
   "sha256_bytes_640:circuits/sha256_bytes_640.circom"
