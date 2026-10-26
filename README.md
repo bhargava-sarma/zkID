@@ -83,15 +83,12 @@ packages/verifier-sdk/     createRequest and verify, with typed failure codes (T
 frontend/                  The holder app (src/App.jsx, src/holder/), and the phone benchmark page (public/bench/)
 apps/demo-rp/              Demo website: request, request QR, verify, one account per nullifier; end-to-end test
 attack-suite/              Tests of the attacks zkID does not defend; generates docs/ATTACK_REPORT.md
-docs/                      Issuer research, threat model, attack report, circuit specification
-backend/                   A health endpoint, plus the v1 circuits and contracts (all retired)
+docs/                      Issuer research, threat model, attack report, circuit specification, decisions
+backend/                   A health endpoint, and the v1 circuits
 tools/                     Test issuer (TEST keys only), v1 audit scripts, repository checks
 spike/                     Phase 1 measurements
 security/                  Keys whose private half is public; never trust them
 ```
-
-`frontend/src/contracts/` holds v1's contract addresses (all retired) and
-client; nothing imports it.
 
 ## Run the demo
 
@@ -111,7 +108,6 @@ machine. Real QRs are never needed, and must never be committed.
 (cd attack-suite && npm test)               # the attacks zkID does not defend, shown working
 node attack-suite/report.mjs                # all of the above that the threat model cites -> docs/ATTACK_REPORT.md
 node --test "tools/repo-checks/*.test.mjs"  # no private key tracked; threat model consistent
-(cd backend/hardhat-deploy && npm test)     # v1 ZkIdPolicy, kept until the chain decision
 ```
 
 Run `npm install` in a package first. Several packages import
@@ -121,21 +117,10 @@ Run `npm install` in a package first. Several packages import
 if the committed attack report differs from the one its run generates.
 [attack-suite/README.md](attack-suite/README.md) has the details.
 
-## v1 on Ethereum Sepolia (RETIRED)
+## v1
 
-**Do not use.** `ZkIdPolicy` trusts the v1 demo issuer key, whose private key is
-public, and returns `Accepted` for forged proofs; this was checked read-only on
-2026-10-20 ([SECURITY_NOTES.md](SECURITY_NOTES.md), [`tools/v1-audit`](tools/v1-audit)).
-The verifiers accept proofs under any issuer key.
-
-| Contract | Role | Address |
-|---|---|---|
-| `ZkIdPolicy` | Relying-party policy over both verifiers (retired) | [`0x8eDa6b1A54900c60C6b730796FfDd51a5327714f`](https://sepolia.etherscan.io/address/0x8eDa6b1A54900c60C6b730796FfDd51a5327714f) |
-| `CredentialAgeVerifier` | Age proof, 18 public signals (retired) | [`0x1052Fc75ce491137D4FA7691b427D5356505b1cd`](https://sepolia.etherscan.io/address/0x1052Fc75ce491137D4FA7691b427D5356505b1cd) |
-| `CredentialMatchVerifier` | Name and gender proof, 19 public signals (retired) | [`0x7bD0f448459f1Eb3F80113df712F2f71DD0B7641`](https://sepolia.etherscan.io/address/0x7bD0f448459f1Eb3F80113df712F2f71DD0B7641) |
-
-They and three older verifiers are listed under `retired` in
-[`frontend/src/contracts/addresses.json`](frontend/src/contracts/addresses.json).
-`npm run deploy:policy` refuses to run. Only the policy's owner can make it stop
-accepting the public key (`setIssuer(<demo modulus limbs>, false)`); nothing in
-this repository sends that transaction.
+v1 (an OCR demo with its own issuer key, and Groth16 verifiers on Ethereum
+Sepolia) is preserved at tag `v1-mock-issuer-demo`. Its Sepolia contracts are
+retired but still deployed, and they accept forged proofs;
+[SECURITY_NOTES.md](SECURITY_NOTES.md) lists them. v2 has no on-chain part:
+[docs/DECISIONS.md](docs/DECISIONS.md) explains why, and what else was cut.

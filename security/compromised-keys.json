@@ -1,5 +1,5 @@
 {
-  "note": "RSA public keys that must never appear in any trusted-issuer list, registry or contract. Their private keys are public. Refused by packages/issuer-registry in every registry (tested in packages/issuer-registry/test) and by tools/test-issuer; checked against Sepolia by tools/v1-audit/check_sepolia_issuer.mjs.",
+  "note": "RSA public keys that must never appear in any trusted-issuer list, registry or contract. Their private keys are public. Refused by packages/issuer-registry in every registry (tested in packages/issuer-registry/test) and by tools/test-issuer. The v1 Sepolia policy was checked against this list by tools/v1-audit/check_sepolia_issuer.mjs, which is at commit 2dfc7ce.",
   "keys": [
     {
       "label": "zkID v1 demo issuer (mock-issuer/mock_issuer_public.pem)",

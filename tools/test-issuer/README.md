@@ -30,7 +30,3 @@ never be trusted anywhere. `keys.js` refuses to use it. See
 node sign_credential.js     # signs synthetic-payload.json -> out/ (gitignored)
 node verify_credential.js   # 12 independent checks, including tamper controls
 ```
-
-`regenerate_v1_fixtures.js` remakes the v1 proof fixtures in
-`backend/hardhat-deploy/test/fixtures/` under a key that exists only while it runs. It needs the v1 circuit artifacts
-(`cd backend && npm run fetch-circuit`).

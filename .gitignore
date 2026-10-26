@@ -27,7 +27,7 @@ build/
 *.log
 .DS_Store
 
-# Hardhat
+# Hardhat (v1, removed from the tree; older clones may still have these)
 backend/hardhat-deploy/artifacts/
 backend/hardhat-deploy/cache/
 

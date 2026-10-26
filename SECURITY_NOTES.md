@@ -1,8 +1,8 @@
 # Security notes
 
 Known security problems in this repository and what was done about them.
-Checked on 2026-10-20; section 4 updated on 2026-10-26, when the v1 server code
-was removed from this branch. The v1 code is preserved at tag
+Checked on 2026-10-20; sections 2 and 4 updated on 2026-10-26, when this branch
+removed the v1 server code and the chain code. The v1 code is preserved at tag
 `v1-mock-issuer-demo` (commit `e94fcb5`).
 
 ## 1. The v1 demo issuer's private key is public
@@ -32,8 +32,8 @@ credentials with it. It was the only issuer the v1 verifier page and the v1
 
 ## 2. The v1 contracts on Sepolia accept forged proofs. They are retired.
 
-Read-only checks with [`tools/v1-audit`](tools/v1-audit) (`eth_call` only, no
-transactions):
+Read-only checks with `tools/v1-audit` (`eth_call` only, no transactions). The
+scripts are at commit `2dfc7ce`; this branch has since removed all chain code:
 
 | Check | Result |
 |---|---|
@@ -48,9 +48,19 @@ for any date of birth. `CredentialAgeVerifier` (`0x1052Fc75…05b1cd`) and
 `CredentialMatchVerifier` (`0x7bD0f448…7641`) accept proofs under any issuer
 key; only the policy checked issuers.
 
-- All three are listed under `retired` in
-  [`frontend/src/contracts/addresses.json`](frontend/src/contracts/addresses.json),
-  the app no longer calls them, and `npm run deploy:policy` refuses to run.
+- This branch has no contract code, calls no contract and deploys nothing
+  ([docs/DECISIONS.md](docs/DECISIONS.md), section 7). Every v1 contract on
+  Sepolia is retired; the three from 2026-09-29 check proofs whose inputs were
+  never signed, so they accept any claim:
+
+  | Contract | Address |
+  |---|---|
+  | `ZkIdPolicy` (2026-10-20) | `0x8eDa6b1A54900c60C6b730796FfDd51a5327714f` |
+  | `CredentialAgeVerifier` (2026-10-20) | `0x1052Fc75ce491137D4FA7691b427D5356505b1cd` |
+  | `CredentialMatchVerifier` (2026-10-20) | `0x7bD0f448459f1Eb3F80113df712F2f71DD0B7641` |
+  | `AgeVerifier` (2026-09-29) | `0x23715a3216ACdF715a75463939A342b844dd01eE` |
+  | `NameVerifier` (2026-09-29) | `0xa5075F2E83167C3c7fE5c3C3F1Fc5FCF1d378232` |
+  | `GenderVerifier` (2026-09-29) | `0x69D8A7Ac149Ed63364DF5DFFDEC25c25cE2417B9` |
 - They stay deployed and keep accepting forgeries. Only the policy's owner
   (`0xBA01E00f7b0131DA8A1bADe4f7A1be2aFE6f90e1`) can stop that, by calling
   `setIssuer(<demo modulus limbs>, false)`. Nothing here sends that
