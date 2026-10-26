@@ -1,0 +1,77 @@
+{
+  "source": "Anon Aadhaar v2.0.0, published by its authors (PSE). Prior work, used unchanged; see docs/circuit-spec.md.",
+  "release": "https://anon-aadhaar-artifacts.s3.eu-central-1.amazonaws.com/v2.0.0",
+  "files": [
+    {
+      "name": "aadhaar-verifier.wasm",
+      "bytes": 10469686,
+      "sha256": "4894923663fafda95beb70abca4112ea97a62058c9a46419a274f04236f10d4f"
+    },
+    {
+      "name": "circuit_final.zkey",
+      "bytes": 612082146,
+      "sha256": "0d443ea85279b0370b53202f5e768ca9098cfcb5bb14f8ca8323d2266822c492"
+    },
+    {
+      "name": "vkey.json",
+      "bytes": 4388,
+      "sha256": "40f2ea24b56ffe2b6e6e3578053cbda15e773cb560697bac883a404077fcf177"
+    }
+  ],
+  "chunkedZkey": {
+    "note": "The same proving key as Anon Aadhaar's SDK downloads it: 10 gzip parts that decompress, in order, to circuit_final.zkey (checked: identical SHA-256).",
+    "path": "chunked_zkey",
+    "files": [
+      {
+        "name": "circuit_final_0.gz",
+        "bytes": 8525757,
+        "sha256": "aa28a374ba89b375f1b13d8e8a2aa6f2eacfe49f833539c30cdb5ce3ce7d51df"
+      },
+      {
+        "name": "circuit_final_1.gz",
+        "bytes": 6238719,
+        "sha256": "7146fefde3c49918aa3cd0178c1d1c7024dd9d5856a5b0f9bbbcf6855c86972f"
+      },
+      {
+        "name": "circuit_final_2.gz",
+        "bytes": 5735232,
+        "sha256": "fca410970b2ad407d09892474b312d852796cae3b51df84737954913d0b5188c"
+      },
+      {
+        "name": "circuit_final_3.gz",
+        "bytes": 26831998,
+        "sha256": "78360576456d28a3bdee7473d1f9d2e0d988f68989ff8fee3c6e6bbea8c05764"
+      },
+      {
+        "name": "circuit_final_4.gz",
+        "bytes": 40012897,
+        "sha256": "be73ffb317ceb4b3f50dc791de488e13865d584c6e4c1294e03d9d121653e34f"
+      },
+      {
+        "name": "circuit_final_5.gz",
+        "bytes": 24679358,
+        "sha256": "4d0b9eb74092a59cf50184dbd3e0473aad48a03d528e4d9106bf410637b176fc"
+      },
+      {
+        "name": "circuit_final_6.gz",
+        "bytes": 34121118,
+        "sha256": "5ce13c3ede49675f56fa883344f8374d0ff5b2a81a27909909480894dc273175"
+      },
+      {
+        "name": "circuit_final_7.gz",
+        "bytes": 27311040,
+        "sha256": "e3d77a1ba94683c63f8485e8075a5a3b4f2c619b25e8fe23c9416b5663b13b28"
+      },
+      {
+        "name": "circuit_final_8.gz",
+        "bytes": 61226907,
+        "sha256": "4526aeef9b23e0f05901856b0ba53d15dd4b5e0892fb6e8c04b5084cc5bbcaa4"
+      },
+      {
+        "name": "circuit_final_9.gz",
+        "bytes": 61226349,
+        "sha256": "07f59ef97c9283a55da5856dd3ca70c6f9f61a3721fe2040c29232cca968bba8"
+      }
+    ]
+  }
+}

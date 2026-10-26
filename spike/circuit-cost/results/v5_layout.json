@@ -1,0 +1,101 @@
+{
+  "when": "2026-10-25T08:01:17.501Z",
+  "shape": {
+    "photoOffset": 249,
+    "signedBytes": 1176,
+    "trailingBytes": 27
+  },
+  "measuredShape": {
+    "accepted": true,
+    "ageAbove18": "1"
+  },
+  "photoSweep": [
+    {
+      "photoBytes": 900,
+      "signedBytes": 1176,
+      "paddedBytes": 1216,
+      "result": "accepted"
+    },
+    {
+      "photoBytes": 920,
+      "signedBytes": 1196,
+      "paddedBytes": 1216,
+      "result": "accepted"
+    },
+    {
+      "photoBytes": 924,
+      "signedBytes": 1200,
+      "paddedBytes": 1216,
+      "result": "accepted"
+    },
+    {
+      "photoBytes": 925,
+      "signedBytes": 1201,
+      "paddedBytes": 1216,
+      "result": "accepted"
+    },
+    {
+      "photoBytes": 931,
+      "signedBytes": 1207,
+      "paddedBytes": 1216,
+      "result": "accepted"
+    },
+    {
+      "photoBytes": 932,
+      "signedBytes": 1208,
+      "paddedBytes": 1280,
+      "result": "rejected (Num2Bits_235)"
+    },
+    {
+      "photoBytes": 940,
+      "signedBytes": 1216,
+      "paddedBytes": 1280,
+      "result": "rejected (Num2Bits_235)"
+    },
+    {
+      "photoBytes": 960,
+      "signedBytes": 1236,
+      "paddedBytes": 1280,
+      "result": "rejected (Num2Bits_235)"
+    },
+    {
+      "photoBytes": 987,
+      "signedBytes": 1263,
+      "paddedBytes": 1280,
+      "result": "rejected (Num2Bits_235)"
+    },
+    {
+      "photoBytes": 988,
+      "signedBytes": 1264,
+      "paddedBytes": 1280,
+      "result": "rejected (Num2Bits_235)"
+    },
+    {
+      "photoBytes": 1000,
+      "signedBytes": 1276,
+      "paddedBytes": 1344,
+      "result": "rejected (Num2Bits_235)"
+    }
+  ],
+  "ruleCheck": [
+    {
+      "photoOffset": 256,
+      "predictedMaxPhoto": 924,
+      "atMax": "accepted",
+      "aboveMax": "rejected (Num2Bits_235)"
+    },
+    {
+      "photoOffset": 257,
+      "predictedMaxPhoto": 987,
+      "atMax": "accepted",
+      "aboveMax": "rejected (Num2Bits_235)"
+    },
+    {
+      "photoOffset": 249,
+      "predictedMaxPhoto": 931,
+      "atMax": "accepted",
+      "aboveMax": "rejected (Num2Bits_235)"
+    }
+  ],
+  "trailerInNullifier": true
+}

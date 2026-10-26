@@ -1,0 +1,17 @@
+{
+  "name": "@zkid/issuer-registry",
+  "private": true,
+  "description": "Trusted issuer keys for zkID verifiers: UIDAI's Secure QR signing keys as the circuit's key hashes, with validity windows. Refuses test keys in production, and compromised keys everywhere.",
+  "type": "module",
+  "main": "index.ts",
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "node check.ts registry.json --production",
+    "test": "node --test \"test/*.test.ts\"",
+    "typecheck": "tsc -p ."
+  },
+  "devDependencies": {
+    "@types/node": "22.19.1",
+    "typescript": "5.9.3"
+  }
+}

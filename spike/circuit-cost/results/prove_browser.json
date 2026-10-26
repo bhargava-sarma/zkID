@@ -1,0 +1,32 @@
+{
+  "when": "2026-10-20T18:23:08.400Z",
+  "machine": {
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "cores": 4,
+    "memGB": 16
+  },
+  "browser": "Chromium 141.0.7390.37 (headless)",
+  "note": "fullProve = witness + proof, with the 612 MB zkey served from localhost (no network cost).",
+  "runs": [
+    {
+      "fullProveMs": 51789,
+      "valid": true,
+      "jsHeapMB": 1850,
+      "peakBrowserRssMB": 4845
+    },
+    {
+      "fullProveMs": 50309,
+      "valid": true,
+      "jsHeapMB": 1850,
+      "peakBrowserRssMB": 4570
+    },
+    {
+      "fullProveMs": 51835,
+      "valid": true,
+      "jsHeapMB": 1850,
+      "peakBrowserRssMB": 4659
+    }
+  ],
+  "medianFullProveMs": 51789,
+  "maxPeakBrowserRssMB": 4845
+}

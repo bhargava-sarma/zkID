@@ -1,0 +1,30 @@
+{
+  "when": "2026-10-26T11:01:04.900Z",
+  "machine": {
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "cores": 4,
+    "memGB": 16,
+    "node": "v22.22.0"
+  },
+  "snarkjs": "0.7.6",
+  "runs": [
+    {
+      "witnessMs": 2665,
+      "proveMs": 36928,
+      "verifyMs": 28
+    },
+    {
+      "witnessMs": 2950,
+      "proveMs": 34423,
+      "verifyMs": 23
+    },
+    {
+      "witnessMs": 2798,
+      "proveMs": 32636,
+      "verifyMs": 17
+    }
+  ],
+  "medianWitnessMs": 2798,
+  "medianProveMs": 34423,
+  "peakRssMB": 3733
+}

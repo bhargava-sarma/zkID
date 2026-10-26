@@ -1,0 +1,65 @@
+{
+  "when": "2026-10-26T11:36:38.657Z",
+  "machine": {
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "cores": 4,
+    "memGB": 16
+  },
+  "browser": "Chromium 141.0.7390.37 (headless)",
+  "note": "The phone benchmark page: artifacts downloaded from Anon Aadhaar host, proving key from its 10 gzip parts, proving in a Web Worker.",
+  "singleThread": true,
+  "runs": [
+    {
+      "when": "2026-10-26T11:35:00.988Z",
+      "singleThread": true,
+      "totalMs": 96709,
+      "mainThreadJsHeapMB": 10,
+      "hashesChecked": true,
+      "stages": {
+        "wasm": {
+          "ms": 1995,
+          "mb": 10.5
+        },
+        "provingKey": {
+          "ms": 16318,
+          "downloadedMb": 295.9,
+          "mb": 612.1
+        },
+        "prove": {
+          "ms": 78159
+        },
+        "verify": {
+          "ms": 176,
+          "valid": true
+        }
+      },
+      "peakChromiumRssMB": 2581
+    },
+    {
+      "when": "2026-10-26T11:36:38.525Z",
+      "singleThread": true,
+      "totalMs": 97271,
+      "mainThreadJsHeapMB": 10,
+      "hashesChecked": true,
+      "stages": {
+        "wasm": {
+          "ms": 1757,
+          "mb": 10.5
+        },
+        "provingKey": {
+          "ms": 17978,
+          "downloadedMb": 295.9,
+          "mb": 612.1
+        },
+        "prove": {
+          "ms": 77307
+        },
+        "verify": {
+          "ms": 185,
+          "valid": true
+        }
+      },
+      "peakChromiumRssMB": 2620
+    }
+  ]
+}

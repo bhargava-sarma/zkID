@@ -1,0 +1,20 @@
+Does Anon Aadhaar's published v2.0.0 proving key match its source?
+
+Published artifact (https://anon-aadhaar-artifacts.s3.eu-central-1.amazonaws.com/v2.0.0/,
+uploaded 2024-06-25): circuit_final.zkey sha256 0d443ea85279b0370b53202f5e768ca9098cfcb5bb14f8ca8323d2266822c492
+  header: groth16, nVars 1026196, nPublic 9, domain 2^20; 105 phase-2 contributions + 1 beacon
+
+Source anon-aadhaar@b61b687 (2024-06-25; circuit identical to HEAD 4dad918 except comments),
+packages/circuits/src/aadhaar-verifier.circom:
+
+  circom 2.2.3, @zk-email/circuits 6.3.4, --O1   wires 1138550  constraints 1152888   (no match; > 2^20)
+  circom 2.2.3, @zk-email/circuits 6.3.4, --O2   wires 1062542  constraints 1076870   (no match; > 2^20)
+  circom 2.1.9, @zk-email/circuits 6.1.1, --O1   wires 1101048  constraints 1115080   (no match)
+  circom 2.1.9, @zk-email/circuits 6.1.1, --O2   wires 1026196  constraints 1040218   MATCH (also circom 2.1.9's default)
+
+circom 2.1.9 binary: https://github.com/iden3/circom/releases/download/v2.1.9/circom-linux-amd64 (sha256 prefix e5575829252d763b)
+@zk-email/circuits 6.1.1 is what the repo's yarn.lock pinned at b61b687.
+
+Not done: snarkjs zkey verify (needs the Hermez powersOfTau28_hez_final_20/21.ptau; the Hermez
+and Google Cloud mirrors returned HTTP 403 from this environment). Matching the variable count
+is strong evidence, not proof, that the key encodes this circuit.
