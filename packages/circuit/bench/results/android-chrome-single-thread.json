@@ -1,0 +1,20 @@
+{
+  "note": "The owner's Android phone, the benchmark page (frontend/public/bench/) with its single-thread option, on this branch's Vercel preview. Synthetic input. Reported by the page; the browser hides the phone model.",
+  "when": "2026-10-26T16:05:17.699Z",
+  "device": {
+    "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Mobile Safari/537.36",
+    "cores": 8,
+    "deviceMemoryGB": 8,
+    "secureContext": true
+  },
+  "singleThread": true,
+  "totalMs": 83902,
+  "mainThreadJsHeapMB": 10,
+  "hashesChecked": true,
+  "stages": {
+    "wasm": { "ms": 77, "mb": 10.5 },
+    "provingKey": { "ms": 3181, "downloadedMb": 295.9, "mb": 612.1 },
+    "prove": { "ms": 79144 },
+    "verify": { "ms": 184, "valid": true }
+  }
+}

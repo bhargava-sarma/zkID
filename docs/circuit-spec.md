@@ -124,14 +124,17 @@ Measured on a 4-core Intel Xeon container (2.1 GHz, 16 GB), snarkjs 0.7.6:
 | Chromium, desktop, the benchmark page: download and unpack the proving key | 13–18 s for 296 MB from Anon Aadhaar's host, every file SHA-256-checked |
 | Chromium, desktop, the benchmark page: witness + proof in a Web Worker | **44.3 s** (median of 3; 43.5–48.1 s); peak 4.7–4.9 GB across Chromium's processes |
 | Chromium, desktop, the page's single-thread option | proving **77.7 s** (2 runs: 77.3, 78.2 s); peak **2.6 GB**, about half |
-| Owner's Android phone, Chrome, default (multi-threaded) | the proving key downloaded and unpacked; then **the tab crashed during proving** ("Aw, Snap!"), most likely out of memory (2026-10-26) |
-| Same phone, single thread | not measured yet |
+| Owner's Android phone (Android 10, Chrome 156, 8 cores, 8 GB or more; the browser hides the model), default (multi-threaded) | the proving key downloaded and unpacked; then **the tab crashed during proving** ("Aw, Snap!"), most likely out of memory (2026-10-26) |
+| Same phone, the page's single-thread option | **proved**: proof **79.1 s**, 83.9 s end to end, verified (2026-10-26). The proving key loaded and unpacked in 3.2 s, most likely from the browser's cache of the earlier attempt |
 
-Raw results: `packages/circuit/bench/results/` (`node.json`, `chromium.json`).
+Raw results: `packages/circuit/bench/results/` (`node.json`, `chromium.json`,
+`chromium-single-thread.json`, `android-chrome-single-thread.json`).
 Phase 1 measured the same artifacts at 3.4 s, 34.4 s and 51.8 s (main thread,
 proving key served locally). The page's memory figure sums Chromium's
-processes, so it overstates the true footprint somewhat. A browser that needs
-about 5 GB on a desktop is a real risk on a phone.
+processes, so it overstates the true footprint somewhat. With several threads
+that was too much for the phone tried; with one thread the same phone proved in
+79 s. Phones with less memory are untested, so the holder app defaults to one
+thread on phones.
 
 ## 6. Negative controls
 

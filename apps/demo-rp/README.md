@@ -31,7 +31,9 @@ Open http://localhost:4101, choose **Verify age with zkID**, and give the holder
 app `apps/demo-rp/.demo/synthetic-qr.png`. The first proof downloads Anon
 Aadhaar's circuit files (about 300 MB, then cached by the browser). Proving
 took about 45 s and 5 GB of memory on a 4-core desktop; the holder app's single
-thread option needs about half the memory and takes longer. Rerunning
+thread option needs about half the memory and takes longer. On a phone, use one
+thread (the default there): an 8-core phone proved in 79 s that way, and ran
+out of memory with several threads. Rerunning
 `npm run setup` makes a new key: restart the holder app afterwards.
 
 What to look for:

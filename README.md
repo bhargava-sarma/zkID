@@ -41,8 +41,10 @@ tests.
 - **Freshness is the only revocation.** A website chooses how old a QR it
   accepts (the demo: 7 days).
 - **Memory.** Proving in a desktop browser takes about 45 s and 5 GB, or about
-  80 s and 2.6 GB on one thread. On the one phone tried, the tab ran out of
-  memory ([docs/circuit-spec.md](docs/circuit-spec.md), section 5).
+  80 s and 2.6 GB on one thread. The one phone tried (8 cores, 8 GB or more)
+  ran out of memory with several threads and proved in 79 s with one; phones
+  with less memory are untested ([docs/circuit-spec.md](docs/circuit-spec.md),
+  section 5).
 - **Not every holder can prove:** photos above 924–987 bytes do not fit the
   circuit, and the date of birth must be `DD-MM-YYYY`.
 - **The nullifier comes from the photo, the bytes after it, and the length of

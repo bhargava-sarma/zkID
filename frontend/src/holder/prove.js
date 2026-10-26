@@ -5,8 +5,8 @@ import manifest from '../../../packages/circuit/artifacts.json' with { type: 'js
 // checked against artifacts.json).
 const base = import.meta.env.VITE_ZKID_ARTIFACTS_URL || manifest.release;
 
-// Phones crashed proving with several threads (docs/circuit-spec.md, section 5);
-// one thread needs about half the memory.
+// A phone ran out of memory proving with several threads, and proved with one
+// (docs/circuit-spec.md, section 5); one thread needs about half the memory.
 export const lowMemoryDevice = () => (navigator.deviceMemory ?? 8) < 8 || /Android|iPhone|iPad/i.test(navigator.userAgent);
 
 export function prove(input, { singleThread = lowMemoryDevice(), onStage } = {}) {

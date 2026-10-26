@@ -376,7 +376,8 @@ the proof time.
 **Mobile: not measured.** No device was available. Anon Aadhaar's changelog says
 version 2.4.1 enabled "mobile browser proving" [S], without numbers. A browser
 needing about 5 GB on desktop is a real risk on a mid-range phone. Phase 3.4
-must measure on an actual phone before promising mobile proving.
+must measure on an actual phone before promising mobile proving. (Measured
+since: [circuit-spec.md](circuit-spec.md), section 5.)
 
 ### 7.3 What Anon Aadhaar's circuit enforces
 

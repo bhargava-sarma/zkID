@@ -186,9 +186,9 @@ where a test is listed, the test shows it succeeding.
 - **Every holder.** Photos above 924–987 bytes cannot be proved
   (issuer-research, section 7.4), a DOB not in `DD-MM-YYYY` fails (T1.8), and
   proving in a desktop browser needs about 5 GB of memory (2.6 GB on one
-  thread). On the one phone tried, the tab ran out of memory; single-thread
-  proving on a phone is unmeasured ([circuit-spec.md](circuit-spec.md),
-  section 5).
+  thread). The one phone tried ran out of memory with several threads and
+  proved in 79 s with one; phones with less memory are untested
+  ([circuit-spec.md](circuit-spec.md), section 5).
 - **Novelty.** RSA in a circuit, the circuit itself and the nullifier
   construction are Anon Aadhaar's. zkID contributes the request protocol, the
   seed and freshness policy, the key registry with validity windows, the SDK,
@@ -254,5 +254,6 @@ table serves a goal.
   nullifier changes. (S8)
 - How large are real photos? Above 924–987 bytes a holder cannot prove at all.
 - What do QRs of holders with only a year of birth contain? (T1.8)
-- Can a mid-range phone prove at all? (Phase 3.4)
+- Can a phone with less than 8 GB of memory prove? An 8-core phone with 8 GB
+  or more proved in 79 s on one thread (circuit-spec, section 5).
 - Does a verifier need UIDAI registration? (issuer-research, section 8)
