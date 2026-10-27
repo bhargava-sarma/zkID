@@ -108,7 +108,7 @@ test('each verifier keeps its own session, although both run on localhost', asyn
   // Browsers share cookies across ports: with one cookie name, B's session replaced A's.
   const page = await (await contextOnce()).newPage();
   await page.goto(`${A}/`);
-  assert.match(await page.textContent('[data-testid=granted]'), /account here is #1/);
+  assert.match(await page.textContent('[data-testid=granted]'), /account here is #001/);
   await page.close();
 });
 

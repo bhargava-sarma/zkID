@@ -43,6 +43,9 @@ name as a hash anyone can test against a list of names. v2 proves one thing, "19
 or older". The circuit can also reveal gender, PIN code and state; the holder app
 never does, and refuses requests that ask (THREAT_MODEL, A6.1).
 
+Changed on 2026-10-27: gender, PIN code and state came back as a verifier's
+rules, which reveal their values (section 10). Name proofs stay removed.
+
 ## 4. No server and no database
 
 The holder app reads the QR and proves in the browser; the verifier SDK runs at
@@ -137,3 +140,42 @@ own Aadhaar QR. It is one Vercel project, built from `apps/demo-rp`
 The holder's domain is a setting (`ZKID_DEMO_HOLDER`), not the project's
 production domain: Vercel picks that from the project's domains by length, and
 a shop's could win.
+
+## 10. Rules on gender, PIN code and state
+
+On 2026-10-27 the owner asked for shops that set rules such as "only male
+customers from these PIN codes", alongside "19 or older". A request now carries
+rules: `age19`, and the genders, PIN codes (exact, or a prefix for a range) and
+states it accepts ([verifier SDK](../packages/verifier-sdk/README.md#rules)).
+
+What it costs, explained to the owner before the go-ahead: Anon Aadhaar's
+circuit, which zkID uses unchanged, computes "19 or older" as a single bit, but
+outputs gender, PIN code and state as values. A rule on one of those three
+therefore shows the verifier the holder's value, not only that it passes: a
+shop accepting 50 PIN codes learns which of the 50 a customer has, and PIN code
+and gender together narrow a person down a great deal. Proving only that a
+value passes would need a new circuit, with a new trusted setup and an audit
+(option B, rejected at stop gate 1). For gender this reverses the brief's
+non-goal "name and gender proofs are removed", and it weakens goal G5, minimal
+disclosure (THREAT_MODEL, decision 5).
+
+What limits it:
+
+- **Only what the rules name.** The holder app sets a reveal flag only for a
+  field the request has a rule on, and the SDK reports only those values.
+- **Nothing when a rule fails.** The holder app checks every rule on the device
+  before proving; a QR that breaks one gives no proof and sends nothing
+  (THREAT_MODEL, T6.4).
+- **Consent.** The app shows the person each value the website will see, and
+  what it never sees, before the "Prove and send" button.
+- **Bound to the rules.** The rules are part of the signal hash, so a proof
+  answers only the rules it was made for (T7.4); the SDK checks every revealed
+  value against them (T1.11).
+
+What it does not limit: a website that writes a rule to admit everyone (all
+three genders, the PIN prefixes 1 to 9) learns the value from everyone who goes
+on; THREAT_MODEL A6.1 is now Partly defended. The request format moved to
+version 2.
+
+In the demo, each visitor sets the shop's rules for their own visit, and the
+shops' test QRs take a chosen gender, PIN code and state.

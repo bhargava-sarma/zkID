@@ -2,21 +2,18 @@
 // nullifier seed (one per verifier) and the signal hash (one per request).
 // Shared by the verifier SDK and the holder app, so it uses only Web APIs.
 
+import { RequestError } from './errors.ts';
+import { canonicalRules, checkRules, type Rules } from './rules.ts';
+
+export { RequestError } from './errors.ts';
+
 export interface ProofRequest {
-  version: 1;
+  version: 2;
   verifierId: string; // the verifier's origin, e.g. https://shop.example (THREAT_MODEL decision 1)
   challenge: string; // 32 random bytes, hex
   maxAgeSeconds: number; // oldest QR accepted, by its generation time
   expiresAt: number; // Unix seconds; the request is void after this
-}
-
-export class RequestError extends Error {
-  code: 'INVALID_VERIFIER_ID' | 'INVALID_REQUEST';
-  constructor(code: RequestError['code'], message: string) {
-    super(`${code}: ${message}`);
-    this.name = 'RequestError';
-    this.code = code;
-  }
+  rules: Rules; // what the QR must show (rules.ts)
 }
 
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
@@ -41,7 +38,7 @@ export function checkRequest(request: unknown): ProofRequest {
   const ok =
     typeof r === 'object' &&
     r !== null &&
-    r.version === 1 &&
+    r.version === 2 &&
     typeof r.challenge === 'string' &&
     /^[0-9a-f]{64}$/.test(r.challenge) &&
     Number.isSafeInteger(r.maxAgeSeconds) &&
@@ -50,6 +47,7 @@ export function checkRequest(request: unknown): ProofRequest {
     r.expiresAt > 0;
   if (!ok) throw new RequestError('INVALID_REQUEST', 'malformed proof request');
   checkVerifierId(r.verifierId);
+  checkRules(r.rules);
   return r;
 }
 
@@ -66,8 +64,8 @@ async function fieldHash(domain: string, text: string): Promise<string> {
 export const nullifierSeedFor = (verifierId: string): Promise<string> =>
   fieldHash('zkid/v1/nullifier-seed', checkVerifierId(verifierId));
 
-// Binds a proof to one request: any change to any field changes it.
+// Binds a proof to one request: any change to any field, rules included, changes it.
 export function signalHashFor(request: ProofRequest): Promise<string> {
   const r = checkRequest(request);
-  return fieldHash('zkid/v1/request', [r.version, r.verifierId, r.challenge, r.maxAgeSeconds, r.expiresAt].join('\n'));
+  return fieldHash('zkid/v2/request', [r.version, r.verifierId, r.challenge, r.maxAgeSeconds, r.expiresAt, canonicalRules(r.rules)].join('\n'));
 }

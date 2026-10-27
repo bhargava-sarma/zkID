@@ -33,12 +33,13 @@ export function qrNeedles(digits: string) {
   return needles;
 }
 
-// The flows through a holder app whose pages start with `holderPrefix`, proving with the QR image `qrFile`.
+// The flows through a holder app whose pages start with `holderPrefix`, proving
+// with the QR image `qrFile` unless a flow is given another.
 export function holderFlows(context: () => Promise<any>, holderPrefix: string, qrFile: string) {
   // In the holder app, from the request to the verifier's answer.
-  async function proveOnHolder(page: any) {
+  async function proveOnHolder(page: any, file = qrFile) {
     await page.waitForSelector('text=asks you to prove');
-    await page.setInputFiles('input[type=file]', qrFile);
+    await page.setInputFiles('input[type=file]', file);
     await page.waitForSelector('[data-testid=qr-ok]');
     await page.click('button:has-text("Prove and send")');
     await page.waitForSelector('[data-testid=answer]', { timeout: PROOF_TIMEOUT });
@@ -48,12 +49,12 @@ export function holderFlows(context: () => Promise<any>, holderPrefix: string, q
   const statusOf = (page: any) => page.evaluate(async () => (await fetch('/zkid/status')).json());
 
   // The whole flow at one verifier, on one device; returns the verifier's view of the result.
-  async function proveAt(verifier: string) {
+  async function proveAt(verifier: string, file = qrFile) {
     const page = await (await context()).newPage();
     await page.goto(`${verifier}/`);
-    await page.click('text=Verify age with zkID');
+    await page.click('[data-testid=verify]');
     await page.waitForURL(`${holderPrefix}**`);
-    const answer = await proveOnHolder(page);
+    const answer = await proveOnHolder(page, file);
     await page.click('[data-testid=answer] a');
     await page.waitForURL(`${verifier}/`);
     const status = await statusOf(page);
@@ -67,7 +68,7 @@ export function holderFlows(context: () => Promise<any>, holderPrefix: string, q
     const ctx = await context();
     const desktop = await ctx.newPage();
     await desktop.goto(`${verifier}/`);
-    await desktop.click('text=Verify on my phone');
+    await desktop.click('[data-testid=verify-phone]');
     const target = readQr(await (await desktop.waitForSelector('[data-testid=request-qr]')).screenshot());
     assert.ok(target.startsWith(`${holderPrefix}?request=`), target);
     const phone = await ctx.newPage();

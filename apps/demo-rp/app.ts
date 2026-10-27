@@ -1,22 +1,26 @@
-// Demo relying party ("Demo shop"): an age-gated page that uses the verifier SDK
-// end to end. It never sees a QR: it issues a request, the holder app proves on
-// the person's device, and only the proof comes back. One account per
-// nullifier. createDemoApp serves one or more shops, each identified by the
-// origin a request arrives on: server.ts runs one locally, vercel/handler.ts
-// several on Vercel.
+// Demo relying party ("Demo shop"): a page that uses the verifier SDK end to
+// end. Each visitor sets the shop's rules for their own visit: 19 or older,
+// and gender, PIN code and state, which a proof reveals by value. The shop
+// never sees a QR: it issues a request, the holder app proves on the person's
+// device, and only the proof comes back. One account per nullifier.
+// createDemoApp serves one or more shops, each identified by the origin a
+// request arrives on: server.ts runs one locally, vercel/handler.ts several on
+// Vercel. The pages are in views.ts.
 
 import crypto from 'node:crypto';
 import type http from 'node:http';
 import QRCode from 'qrcode';
-import { createVerifier, type ProofRequest, type Store, type VerifyResult } from '../../packages/verifier-sdk/src/index.ts';
+import { GENDERS, RequestError, checkRules, createVerifier, type ProofRequest, type Rules, type Store } from '../../packages/verifier-sdk/src/index.ts';
 import { checkRegistry, productionRegistry, testRegistry, type Registry } from '../../packages/issuer-registry/index.ts';
 import { makeSyntheticSecureQr, syntheticFields, syntheticPhoto, unknownTrailer } from '../../packages/secure-qr/synthetic.mjs';
 import type { KV } from './kv.ts';
+import { STATES, qrPage, shopPage, type Session } from './views.ts';
 
 const REQUEST_TTL = 15 * 60; // the SDK's default is 5 minutes; on a phone, proving alone can take minutes
 const MAX_AGE = 7 * 86400; // a QR generated in the last 7 days
 const SESSION_TTL = 86400;
 const CODE_TTL = 7 * 86400; // how long a shop remembers a per-site code
+const DEFAULT_RULES: Rules = { age19: true };
 
 export interface DemoOptions {
   // The shop's verifier id (its origin) for this request, or null if the request is not for a shop.
@@ -27,8 +31,6 @@ export interface DemoOptions {
   // The demo's TEST issuer, if the registry trusts one. With its private key, the shops hand out sample QRs.
   testIssuer?: { label: string; privateKey?: crypto.KeyObject };
 }
-
-type Session = { challenge?: string; result?: VerifyResult; account?: number };
 
 // UIDAI's keys plus the demo's TEST keys, as setup-demo.mjs and vercel/build.mjs write them.
 export function demoRegistry(testKeys: { id: string; modulus: string; keyHash: string }[]): Registry {
@@ -74,35 +76,62 @@ class KvStore implements Store {
   }
 }
 
-const escape = (text: string) => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-
-async function readJson(req: http.IncomingMessage): Promise<unknown> {
+async function readBody(req: http.IncomingMessage, limit: number) {
   let size = 0;
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > 64 * 1024) throw new BadRequest('body too large');
+    if (size > limit) throw new BadRequest('body too large');
     chunks.push(chunk);
   }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+async function readJson(req: http.IncomingMessage): Promise<unknown> {
+  const body = await readBody(req, 64 * 1024);
   try {
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    return JSON.parse(body);
   } catch {
     throw new BadRequest('body is not JSON');
   }
 }
 
-// A synthetic QR, signed by the TEST issuer, as a PNG. `minor`: 17 years old today.
-async function sampleQr(privateKey: crypto.KeyObject, minor: boolean) {
+// The rules form (views.ts) as rules. checkRules has the last word.
+function rulesFrom(form: URLSearchParams): Rules {
+  const rules: Rules = { age19: form.get('age19') === 'on' };
+  const gender = form.getAll('gender');
+  const pinCode = (form.get('pin') ?? '')
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .map((p) => p.replace(/x+$/i, '')); // 5600xx is the range 5600
+  const state = form.getAll('state');
+  if (gender.length) rules.gender = gender as Rules['gender'];
+  if (pinCode.length) rules.pinCode = pinCode;
+  if (state.length) rules.state = state;
+  return checkRules(rules);
+}
+
+// A synthetic QR, signed by the TEST issuer, as a PNG: an adult born in 1990,
+// or someone 17 years old today, with the gender, PIN code and state asked for.
+async function sampleQr(privateKey: crypto.KeyObject, params: URLSearchParams) {
   const now = new Date();
+  const minor = params.has('minor') || params.get('age') === 'minor';
   const dob = minor ? `${String(now.getUTCDate()).padStart(2, '0')}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${now.getUTCFullYear() - 17}` : '01-01-1990';
+  const gender = params.get('gender') ?? 'M';
+  const pincode = params.get('pin') ?? '560034';
+  const state = params.get('state') ?? 'Karnataka';
+  if (!Object.hasOwn(GENDERS, gender)) throw new BadRequest('gender must be M, F or T');
+  if (!/^[1-9][0-9]{5}$/.test(pincode)) throw new BadRequest('pin must be six digits, not starting with 0');
+  if (!STATES.includes(state)) throw new BadRequest('state must be one of the listed states');
   const { text } = makeSyntheticSecureQr(privateKey, {
     version: 'V5',
     photo: syntheticPhoto(900),
     trailing: unknownTrailer(27),
-    fields: { ...syntheticFields({ generatedAt: now }), dob },
+    fields: { ...syntheticFields({ generatedAt: now }), dob, gender, pincode, state },
   });
   // Numeric mode, as UIDAI's codes; low error correction keeps 3,000+ digits readable.
-  return QRCode.toBuffer([{ data: text, mode: 'numeric' }], { errorCorrectionLevel: 'L', margin: 4, scale: 4 });
+  const png = await QRCode.toBuffer([{ data: text, mode: 'numeric' }], { errorCorrectionLevel: 'L', margin: 4, scale: 4 });
+  return { png, name: `zkid-synthetic-test-qr-${minor ? 'under-19' : 'adult'}-${gender}-${pincode}.png` };
 }
 
 export function createDemoApp(options: DemoOptions) {
@@ -118,43 +147,8 @@ export function createDemoApp(options: DemoOptions) {
   };
 
   const holderUrl = (site: string, challenge: string) => `${holder.href}?request=${encodeURIComponent(`${site}/zkid/request/${challenge}`)}`;
-
-  const html = (site: string, body: string) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Demo shop, ${escape(site)}</title>
-<style>body{font:16px/1.5 system-ui,sans-serif;max-width:40rem;margin:2rem auto;padding:0 1rem}.ok{color:#1b6e3a}.error{color:#a3261b}button{font:inherit;padding:.5rem 1rem;margin:0 .5rem .5rem 0}form{display:inline}a{overflow-wrap:anywhere}</style></head>
-<body><h1>Demo shop</h1><p>Verifier: <code>${escape(site)}</code></p>${body}</body></html>`;
-
-  const page = (site: string, session: Session) => {
-    const r = session.result;
-    const status = !r
-      ? '<p>This page is for people who are 19 or older.</p>'
-      : r.ok
-        ? `<p class="ok" data-testid="granted">Access granted. Your account here is <strong>#${session.account}</strong> (code <code>${r.nullifier.slice(0, 8)}…</code>).</p>`
-        : `<p class="error" data-testid="refused">Refused: <strong>${escape(r.code)}</strong>. ${escape(r.detail)}</p>`;
-    const samples = testIssuer?.privateKey
-      ? ` No Aadhaar QR at hand? Download a sample QR: <a href="/sample-qr.png">adult</a>, <a href="/sample-qr.png?minor">under 19</a> (synthetic, not UIDAI).`
-      : '';
-    return html(
-      site,
-      `${status}
-<form method="post" action="/start"><button>Verify age with zkID</button></form>
-<form method="post" action="/start?qr"><button>Verify on my phone</button></form>
-<p><small>You need an image of the QR on an e-Aadhaar downloaded in the last 7 days. The age check runs on your device, on your own QR. This site receives a proof and a per-site code, nothing else, and keeps the code for 7 days.</small></p>
-${testIssuer ? `<p><small>Demo: besides UIDAI, this shop trusts ${escape(testIssuer.label)}.${samples}</small></p>` : ''}`,
-    );
-  };
-
-  // The request as a QR, for the holder app on another device. This page polls
-  // for the result, which arrives when that device posts the proof.
-  const qrPage = (site: string, qr: string, url: string) =>
-    html(
-      site,
-      `<p>Scan this with your phone's camera to open the request in zkID there:</p>
-<p><img data-testid="request-qr" src="${qr}" alt="QR code of the zkID request" width="300" height="300"></p>
-<p><small><a href="${escape(url)}">${escape(url)}</a></small></p>
-<p aria-live="polite">Waiting for the proof. The request expires in 15 minutes.</p>
-<script>setInterval(async () => { if (await (await fetch('/zkid/status')).json()) location = '/'; }, 2000);</script>`,
-    );
+  const page = (site: string, session: Session, error?: string) =>
+    shopPage({ site, session, rules: session.rules ?? DEFAULT_RULES, testIssuerLabel: testIssuer?.label, samples: !!testIssuer?.privateKey, error });
 
   // Browsers share cookies across the ports of one host, so each shop on
   // localhost needs its own cookie name, or they overwrite each other's session.
@@ -192,11 +186,25 @@ ${testIssuer ? `<p><small>Demo: besides UIDAI, this shop trusts ${escape(testIss
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       return res.end(page(site, session));
     }
+    if (req.method === 'POST' && url.pathname === '/rules') {
+      const { sid, session } = await sessionOf(site, req, res);
+      let rules: Rules;
+      try {
+        rules = rulesFrom(new URLSearchParams(await readBody(req, 16 * 1024)));
+      } catch (err) {
+        if (!(err instanceof RequestError)) throw err;
+        res.writeHead(400, { 'content-type': 'text/html; charset=utf-8' });
+        return res.end(page(site, session, `Those rules were not saved: ${err.message.replace(/^INVALID_REQUEST: /, '')}.`));
+      }
+      await saveSession(site, sid, { ...session, rules });
+      return redirect(res, '/');
+    }
     if (req.method === 'POST' && url.pathname === '/start') {
-      const { sid } = await sessionOf(site, req, res);
-      const request = await verifierFor(site).createRequest({ maxAgeSeconds: MAX_AGE });
+      const { sid, session } = await sessionOf(site, req, res);
+      const rules = session.rules ?? DEFAULT_RULES;
+      const request = await verifierFor(site).createRequest({ maxAgeSeconds: MAX_AGE, rules });
       await kv.set(`zkid:${site}:pend:${request.challenge}`, JSON.stringify({ request, sid }), REQUEST_TTL + 60);
-      await saveSession(site, sid, { challenge: request.challenge });
+      await saveSession(site, sid, { challenge: request.challenge, rules });
       return redirect(res, url.searchParams.has('qr') ? '/qr' : holderUrl(site, request.challenge));
     }
     if (req.method === 'GET' && url.pathname === '/qr') {
@@ -205,20 +213,15 @@ ${testIssuer ? `<p><small>Demo: besides UIDAI, this shop trusts ${escape(testIss
       const target = holderUrl(site, session.challenge);
       const qr = await QRCode.toDataURL(target, { errorCorrectionLevel: 'M', margin: 4, scale: 6 });
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-      return res.end(qrPage(site, qr, target));
+      return res.end(qrPage(site, session.rules ?? DEFAULT_RULES, qr, target));
     }
     if (req.method === 'GET' && url.pathname === '/zkid/status') {
       const { session } = await sessionOf(site, req, res);
       return json(res, 200, session.result ? { ...session.result, account: session.account } : null);
     }
     if (req.method === 'GET' && url.pathname === '/sample-qr.png' && testIssuer?.privateKey) {
-      const minor = url.searchParams.has('minor');
-      const png = await sampleQr(testIssuer.privateKey, minor);
-      res.writeHead(200, {
-        'content-type': 'image/png',
-        'content-disposition': `attachment; filename="zkid-synthetic-test-qr-${minor ? 'under-19' : 'adult'}.png"`,
-        'cache-control': 'no-store',
-      });
+      const { png, name } = await sampleQr(testIssuer.privateKey, url.searchParams);
+      res.writeHead(200, { 'content-type': 'image/png', 'content-disposition': `attachment; filename="${name}"`, 'cache-control': 'no-store' });
       return res.end(png);
     }
     if (challenge && req.method === 'OPTIONS') {
@@ -237,7 +240,9 @@ ${testIssuer ? `<p><small>Demo: besides UIDAI, this shop trusts ${escape(testIss
       const { request, sid } = JSON.parse(entry) as { request: ProofRequest; sid: string };
       const body = (await readJson(req)) as { proof?: unknown; publicSignals?: unknown };
       const result = await verifierFor(site).verify(body?.proof, body?.publicSignals, request);
-      const session: Session = { challenge, result };
+      // Keep rules the visitor saved while the holder was proving.
+      const current = JSON.parse((await kv.get(sessionKey(site, sid))) ?? '{}') as Session;
+      const session: Session = { challenge, result, rules: current.rules ?? request.rules };
       if (result.ok) session.account = await kv.incr(`zkid:${site}:accounts`);
       await saveSession(site, sid, session);
       console.log(`${new Date().toISOString()} ${site} ${result.ok ? `accepted, account #${session.account}` : `refused ${result.code}`}`);

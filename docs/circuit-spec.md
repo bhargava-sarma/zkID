@@ -53,7 +53,7 @@ Private inputs:
 | `delimiterIndices` | 18 | positions of the first 18 `0xFF` delimiters |
 | `signature` | 17 limbs of 121 bits | RSA signature |
 | `pubKey` | 17 limbs of 121 bits | RSA modulus (e = 65537) |
-| `revealAgeAbove18`, `revealGender`, `revealPinCode`, `revealState` | 1 each | 0 or 1. zkID's holder app sets only the age flag |
+| `revealAgeAbove18`, `revealGender`, `revealPinCode`, `revealState` | 1 each | 0 or 1. zkID's holder app sets a flag only for what the request's rules name |
 
 Public inputs: `nullifierSeed` and `signalHash`. Outputs: `pubkeyHash`,
 `nullifier`, `timestamp`, `ageAbove18`, `gender`, `pinCode`, `state`. snarkjs
@@ -90,6 +90,13 @@ nullifierSeed, signalHash`.
 - **Reveal flags** are constrained to 0 or 1, and each revealed output is
   multiplied by its flag. **`signalHash`** is squared in a constraint, so a
   proof is bound to it.
+- **Gender, PIN code and state** are read whether or not they are revealed. The
+  gender must be one byte; the output is its character code (77 for M). The
+  PIN code must be six bytes; the output is its digits as a number (560034).
+  The state must be at most 31 bytes (32 or more fails a comparator); the
+  output packs its bytes into one integer, first byte lowest. A test in
+  `packages/circuit` checks all three encodings, and that a longer state or a
+  PIN code field of another length fails the witness.
 
 ## 4. What it does not enforce
 
@@ -108,6 +115,10 @@ security.
   `buildInput` reports this as `PHOTO_TOO_LARGE` before any proving.
 - **Only one age check**, against the QR's generation date, from the 19th
   birthday. No other cutoff is possible.
+- **Values, not predicates.** Gender, PIN code and state are output as values,
+  so a verifier's rule on one of them learns the value. PIN code digits are not
+  range-checked either; the holder app refuses a PIN code rule on a QR whose PIN
+  code is not six digits.
 - **No key validity window in-circuit.** The verifier SDK compares `timestamp`
   with the key's window (Phase 4).
 - **The timestamp is always public**, to the hour.

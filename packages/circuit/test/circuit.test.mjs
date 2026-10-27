@@ -83,12 +83,13 @@ test('keyHash: deterministic, different per key, RSA-2048 with e = 65537 only', 
   throwsCode(() => keyHash(crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' }).publicKey), 'UNSUPPORTED_KEY');
 });
 
-test('buildInput: reveals only the age bit', () => {
+const flags = (circuitInput) => [circuitInput.revealAgeAbove18, circuitInput.revealGender, circuitInput.revealPinCode, circuitInput.revealState];
+
+test('buildInput: reveals only the age bit, unless asked for other fields', () => {
   const circuitInput = input(v5());
-  assert.deepEqual(
-    [circuitInput.revealAgeAbove18, circuitInput.revealGender, circuitInput.revealPinCode, circuitInput.revealState],
-    ['1', '0', '0', '0'],
-  );
+  assert.deepEqual(flags(circuitInput), ['1', '0', '0', '0']);
+  assert.deepEqual(flags(buildInput(v5(), keys.publicKey, PUBLIC, { ageAbove18: false, gender: true, pinCode: true, state: true })), ['0', '1', '1', '1']);
+  assert.deepEqual(flags(buildInput(v5(), keys.publicKey, PUBLIC, { pinCode: true })), ['0', '0', '1', '0']);
   assert.equal(circuitInput.qrDataPadded.length, 1536);
   assert.equal(circuitInput.delimiterIndices.length, 18);
   assert.deepEqual([circuitInput.nullifierSeed, circuitInput.signalHash], ['1111', '2222']);
@@ -146,6 +147,26 @@ test('a valid synthetic V5 code: accepted; outputs as expected', NEEDS_WASM, asy
   assert.deepEqual([out.nullifierSeed, out.signalHash], ['1111', '2222']);
   // The largest photo buildInput lets through is one the circuit accepts.
   assert.equal((await run(input(v5({ photo: syntheticPhoto(985) })))).ageAbove18, '1');
+});
+
+// A string's bytes as one integer, first byte lowest.
+const packed = (text) => [...Buffer.from(text, 'latin1')].reduceRight((value, byte) => (value << 8n) | BigInt(byte), 0n).toString();
+
+test('revealed gender, PIN code and state: the character code, the six digits as a number, the name packed first byte lowest', NEEDS_WASM, async () => {
+  const text = v5({ fields: { gender: 'F', pincode: '560034', state: 'Karnataka' } });
+  const out = await run(buildInput(text, keys.publicKey, PUBLIC, { ageAbove18: true, gender: true, pinCode: true, state: true }));
+  assert.deepEqual([out.ageAbove18, out.gender, out.pinCode, out.state], ['1', String('F'.charCodeAt(0)), '560034', packed('Karnataka')]);
+  const one = await run(buildInput(text, keys.publicKey, PUBLIC, { pinCode: true }));
+  assert.deepEqual([one.ageAbove18, one.gender, one.pinCode, one.state], ['0', '0', '560034', '0']);
+});
+
+test('a state over 31 bytes, or a PIN code field that is not 6 bytes, fails the witness, revealed or not', NEEDS_WASM, async () => {
+  const state31 = 'Andaman and Nicobar Islands Uts'; // 31 bytes
+  assert.equal((await run(input(v5({ fields: { state: state31 } })))).ageAbove18, '1');
+  assert.equal((await run(buildInput(v5({ fields: { state: state31 } }), keys.publicKey, PUBLIC, { state: true }))).state, packed(state31));
+  assert.match(await failure(input(v5({ fields: { state: 'Dadra and Nagar Haveli and Daman and Diu' } }))), /QRDataExtractor|ExtractAndPackAsInt|SelectSubArray|LessThan|Num2Bits/);
+  assert.notEqual(await failure(input(v5({ fields: { pincode: '56003' } }))), null);
+  assert.notEqual(await failure(input(v5({ fields: { pincode: '5600341' } }))), null);
 });
 
 test('T1.2: one changed byte of the signed data, wherever it is, fails the witness', NEEDS_WASM, async () => {

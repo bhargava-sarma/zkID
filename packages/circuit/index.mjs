@@ -70,7 +70,7 @@ function modulusOf(key) {
 export const keyHash = (key) => keyHashFromModulus(modulusOf(key));
 
 // Circuit input for a Secure QR (its text) and the key that signed it.
-export const buildInput = (qrText, key, publicInputs) => circuitInput(decodeSecureQr(qrText), modulusOf(key), publicInputs);
+export const buildInput = (qrText, key, publicInputs, reveal) => circuitInput(decodeSecureQr(qrText), modulusOf(key), publicInputs, reveal);
 
 // ---- Witness, proof, verification -------------------------------------------
 

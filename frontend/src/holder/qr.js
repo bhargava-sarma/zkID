@@ -4,6 +4,7 @@ import jsQR from 'jsqr';
 import { decodeSecureQr, findSigner, importRsaKey, parseReferenceId } from '../../../packages/secure-qr/web.mjs';
 import { circuitInput } from '../../../packages/circuit/input.mjs';
 import registry from '../../../packages/issuer-registry/registry.json' with { type: 'json' };
+import { GENDERS, MAX_STATE_BYTES, disclosedFor, revealFor, ruleFailure } from '../../../packages/verifier-sdk/src/rules.ts';
 import { HolderError } from './errors.js';
 
 // The local demo's ephemeral test key, compiled in by vite.config.js in demo
@@ -54,8 +55,35 @@ function circuitAgeAbove18(dobBytes, referenceId) {
   return age > 18;
 }
 
+const latin1 = (bytes) => String.fromCharCode(...bytes);
+
+// The values the circuit would output for gender, PIN code and state, as
+// rules.ts compares them. The circuit reads a 1-byte gender, a 6-byte PIN code
+// and a state of at most 31 bytes, revealed or not: any other QR cannot be
+// proved at all, so it is refused here, before the download.
+function circuitValues(fields, rules) {
+  const values = { gender: latin1(fields.gender), pinCode: latin1(fields.pincode), state: latin1(fields.state) };
+  if (fields.gender.length !== 1) throw new HolderError('UNSUPPORTED_GENDER', 'The gender in your QR is not one character, which the circuit cannot read.');
+  if (fields.pincode.length !== 6 || (rules.pinCode && !/^[0-9]{6}$/.test(values.pinCode))) {
+    throw new HolderError('UNSUPPORTED_PIN_CODE', 'The PIN code in your QR is not six digits, which the circuit cannot read.');
+  }
+  if (fields.state.length > MAX_STATE_BYTES) {
+    throw new HolderError('UNSUPPORTED_STATE', `The state in your QR is longer than ${MAX_STATE_BYTES} characters, which the circuit cannot read.`);
+  }
+  return values;
+}
+
+// How the page writes a value or a rule: a PIN code range as 5600xx.
+export const shown = { gender: (g) => GENDERS[g] ?? g, pinCode: (p) => p.padEnd(6, 'x'), state: (s) => s };
+const RULE_ERRORS = {
+  GENDER_NOT_ALLOWED: ['GENDER_NOT_ACCEPTED', 'gender', 'genders'],
+  PIN_CODE_NOT_ALLOWED: ['PIN_CODE_NOT_ACCEPTED', 'pinCode', 'PIN codes'],
+  STATE_NOT_ALLOWED: ['STATE_NOT_ACCEPTED', 'state', 'states'],
+};
+
 // Decodes the QR text and checks it against the trusted keys and the request.
-// Returns what the prover needs and what the page may show (the date only).
+// Returns what the prover needs, and what the page may show: the date, and the
+// values the proof will reveal (`disclosed`, only the fields the rules name).
 export async function checkQr(text, keys, request, now = Date.now() / 1000) {
   const qr = await decodeSecureQr(text); // throws SecureQrError with a code
   const signer = await findSigner(qr, keys);
@@ -68,11 +96,19 @@ export async function checkQr(text, keys, request, now = Date.now() / 1000) {
   if (now - hour > request.maxAgeSeconds) {
     throw new HolderError('QR_TOO_OLD', `This QR was generated on ${generatedAt.toDateString()}, which is older than ${request.verifierId} accepts. Download a fresh e-Aadhaar and try again.`);
   }
-  if (!circuitAgeAbove18(qr.fields.dob, qr.fields.referenceId)) {
+  const { rules } = request;
+  const values = circuitValues(qr.fields, rules);
+  if (rules.age19 && !circuitAgeAbove18(qr.fields.dob, qr.fields.referenceId)) {
     throw new HolderError('NOT_19', "Your QR does not show an age of 19 or older on the day it was generated, so the website would refuse the proof. (The circuit's check is \"above 18\", which starts at 19.)");
   }
-  return { qr, signer, generatedAt };
+  const broken = ruleFailure(rules, values);
+  if (broken) {
+    const [code, field, plural] = RULE_ERRORS[broken];
+    throw new HolderError(code, `${request.verifierId} accepts only these ${plural}: ${rules[field].map(shown[field]).join(', ')}. Your QR shows ${shown[field](values[field])}, so nothing was proved or sent.`);
+  }
+  return { qr, signer, generatedAt, disclosed: disclosedFor(rules, values) };
 }
 
-// The circuit input for a checked QR (throws CircuitError, e.g. PHOTO_TOO_LARGE).
-export const inputFor = ({ qr, signer }, publicInputs) => circuitInput(qr, BigInt(`0x${signer.modulus}`), publicInputs);
+// The circuit input for a checked QR: it reveals what the request's rules name,
+// nothing else (throws CircuitError, e.g. PHOTO_TOO_LARGE).
+export const inputFor = ({ qr, signer }, publicInputs, rules) => circuitInput(qr, BigInt(`0x${signer.modulus}`), publicInputs, revealFor(rules));

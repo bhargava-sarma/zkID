@@ -1,11 +1,11 @@
 // The verifier's request, as this app receives it: fetched from the URL in
 // ?request=, which must be on the verifier's own origin, as must the URLs it
-// names (THREAT_MODEL decision 1, test T5.4). A request asking for anything
-// beyond the five request fields, such as revealing more, is refused (T6.2).
+// names (THREAT_MODEL decision 1, test T5.4). A request with anything beyond
+// the request format, or with malformed rules, is refused (T6.2).
 import { checkRequest, nullifierSeedFor, signalHashFor } from '../../../packages/verifier-sdk/src/request.ts';
 import { HolderError } from './errors.js';
 
-const REQUEST_FIELDS = ['version', 'verifierId', 'challenge', 'maxAgeSeconds', 'expiresAt'];
+const REQUEST_FIELDS = ['version', 'verifierId', 'challenge', 'maxAgeSeconds', 'expiresAt', 'rules'];
 const SERVED_FIELDS = ['request', 'responseUrl', 'returnUrl'];
 
 const originOf = (url, what) => {
@@ -27,7 +27,7 @@ export function acceptServedRequest(requestUrl, served, now = Date.now() / 1000)
     ...Object.keys(served.request).filter((k) => !REQUEST_FIELDS.includes(k)),
   ];
   if (extra.length) {
-    throw new HolderError('UNSUPPORTED_REQUEST', `The website asks for more than this app proves (${extra.join(', ')}). It only proves "19 or older".`);
+    throw new HolderError('UNSUPPORTED_REQUEST', `The website asks for something this app does not prove (${extra.join(', ')}).`);
   }
   let request;
   try {

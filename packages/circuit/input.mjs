@@ -70,6 +70,8 @@ function sha256Pad(message) {
   return { padded, paddedLength };
 }
 
+const flag = (on) => (on ? '1' : '0');
+
 function fieldElement(name, value) {
   let v;
   try {
@@ -82,10 +84,12 @@ function fieldElement(name, value) {
 }
 
 // `qr` is a decoded Secure QR (decodeSecureQr in secure-qr.mjs or web.mjs);
-// `modulus` the signing key's modulus as a BigInt. Only the age bit is revealed:
-// gender, PIN code and state stay hidden (docs/THREAT_MODEL.md, A6.1). The
-// signature is not checked here; the circuit checks it.
-export function circuitInput(qr, modulus, { nullifierSeed, signalHash }) {
+// `modulus` the signing key's modulus as a BigInt. `reveal` names the outputs
+// to reveal; by default only the age bit, so gender, PIN code and state stay
+// hidden. The holder app reveals a field only when the request has a rule on it
+// (docs/THREAT_MODEL.md, A6.1). The signature is not checked here; the circuit
+// checks it.
+export function circuitInput(qr, modulus, { nullifierSeed, signalHash }, reveal = { ageAbove18: true }) {
   if (qr.version !== 'V2' && qr.version !== 'V5') {
     throw new CircuitError('UNSUPPORTED_LAYOUT', `The circuit reads the V2/V5 field layout; this code is ${qr.version}.`);
   }
@@ -100,10 +104,10 @@ export function circuitInput(qr, modulus, { nullifierSeed, signalHash }) {
     delimiterIndices: qr.delimiterIndices.map(String),
     signature: limbs(bytesToBigInt(qr.signature)).map(String),
     pubKey: limbs(checkModulus(modulus)).map(String),
-    revealAgeAbove18: '1',
-    revealGender: '0',
-    revealPinCode: '0',
-    revealState: '0',
+    revealAgeAbove18: flag(reveal.ageAbove18),
+    revealGender: flag(reveal.gender),
+    revealPinCode: flag(reveal.pinCode),
+    revealState: flag(reveal.state),
     nullifierSeed: fieldElement('nullifierSeed', nullifierSeed),
     signalHash: fieldElement('signalHash', signalHash),
   };

@@ -10,14 +10,14 @@ Suites: `packages/secure-qr`, `packages/circuit`, `packages/issuer-registry`, `p
 
 | Adversary | Attacks | Defended | Partly | Not defended |
 |---|---|---|---|---|
-| A1 Forger | 10 | 8 | 1 | 1 |
+| A1 Forger | 11 | 9 | 1 | 1 |
 | A2 Replayer | 5 | 4 | 0 | 1 |
 | A3 Lender | 4 | 1 | 0 | 3 |
 | A4 Sybil | 6 | 2 | 1 | 3 |
 | A5 Linker | 5 | 2 | 0 | 3 |
-| A6 Malicious verifier | 4 | 3 | 0 | 1 |
+| A6 Malicious verifier | 4 | 2 | 1 | 1 |
 | A7 Tamperer | 6 | 6 | 0 | 0 |
-| **All** | 40 | 26 | 2 | 12 |
+| **All** | 41 | 26 | 3 | 12 |
 
 ## Not defended, or only partly
 
@@ -36,6 +36,7 @@ Suites: `packages/secure-qr`, `packages/circuit`, `packages/issuer-registry`, `p
 | A5.2 | Compute someone's nullifier for every site from their QR (anyone with a copy, or UIDAI) | **No** | the photo is not secret | T5.2 ✓ |
 | A5.3 | Match the QR's generation hour and key hash across sites | **No** under option A | both are public outputs; a holder who uses a separate fresh QR per site avoids matching hours | T5.3 ✓ |
 | A5.4 | Correlate IP addresses or timing | **No** | out of scope | none |
+| A6.1 | Ask the holder app to reveal gender, PIN code or state | Partly | the app reveals a field only when the request has a rule on it, checks the rule on the device first (a QR that breaks it reveals nothing) and shows the person each value before proving; but a rule written to admit everyone, such as all three genders or the PIN prefixes 1 to 9, learns the value of everyone who goes on | T6.1 ✓, T6.2 ✓, T6.4 ✓ |
 | A6.3 | Learn the QR's generation hour and UIDAI key | **No** under option A | always public | T5.3 ✓ |
 
 ## A1 Forger
@@ -50,8 +51,9 @@ Suites: `packages/secure-qr`, `packages/circuit`, `packages/issuer-registry`, `p
 | A1.6 | Sign with UIDAI's current key | **No** | assumption S1 | none |
 | A1.7 | Swap the verification key, circuit artifacts or registry | Yes | pinned by SHA-256 at build time | T1.7 ✓ |
 | A1.8 | Forge a proof without a valid witness | Yes, under S3 and S9 | Groth16 soundness | none |
-| A1.9 | Use a genuine QR of someone under 18, or hide the age bit | Yes | `ageAbove18` must be 1, which the circuit outputs only from the 19th birthday | T1.10 ✓ |
+| A1.9 | Use a genuine QR of someone under 18, or hide the age bit | Yes | when the rules ask for age, `ageAbove18` must be 1, which the circuit outputs only from the 19th birthday | T1.10 ✓ |
 | A1.10 | Exploit unusual signed data: a DOB not in `DD-MM-YYYY`, or non-digits | Partly | fails closed when the DOB is not 10 bytes (the circuit checks the delimiter 11 bytes after its start); digits are not range-checked, so this relies on UIDAI's formatting (S4) | T1.8 ✓, T1.9 ✓ |
+| A1.11 | Pass a verifier's rule on gender, PIN code or state with a QR that breaks it, or by hiding the field | Yes | the circuit outputs the signed value; the SDK compares it with the request's rules, and a field the rules name that the proof hides fails | T1.11 ✓ |
 
 ## A2 Replayer
 
@@ -97,7 +99,7 @@ Suites: `packages/secure-qr`, `packages/circuit`, `packages/issuer-registry`, `p
 
 | | Attack | Defended? | How, or why not | Tests |
 |---|---|---|---|---|
-| A6.1 | Ask the holder app to reveal gender, PIN code or state | Yes | the app refuses, and always sets those reveal flags to 0 | T6.1 ✓, T6.2 ✓ |
+| A6.1 | Ask the holder app to reveal gender, PIN code or state | Partly | the app reveals a field only when the request has a rule on it, checks the rule on the device first (a QR that breaks it reveals nothing) and shows the person each value before proving; but a rule written to admit everyone, such as all three genders or the PIN prefixes 1 to 9, learns the value of everyone who goes on | T6.1 ✓, T6.2 ✓, T6.4 ✓ |
 | A6.2 | Learn the DOB or exact age | Yes | only the 18+ bit is output | T6.1 ✓ |
 | A6.3 | Learn the QR's generation hour and UIDAI key | **No** under option A | always public | T5.3 ✓ |
 | A6.4 | Get the QR itself | Yes, under S7 | the app never sends it | T6.3 ✓ |
@@ -129,6 +131,7 @@ Each id with the tests that passed for it.
 | T1.8 | DOB field of 4 bytes (year only) | witness generation fails | `packages/circuit`: T1.8: a DOB field that is not 10 bytes (year only) fails the witness |
 | T1.9 | DOB of 10 bytes with non-digits | outputs recorded; documents the missing range check | `packages/circuit`: T1.9: DOB digits are not range-checked; the circuit relies on UIDAI formatting (S4) |
 | T1.10 | QR generated the day before, on, and after the holder's 18th and 19th birthdays; an adult with the age flag off | `ageAbove18` is 1 only on and after the 19th birthday (Phase 3); `AGE_NOT_PROVEN` for every 0 (Phase 4) | `packages/circuit`: T1.10: ageAbove18 is 1 only from the 19th birthday, on the QR generation date<br>`packages/verifier-sdk`: T1.10: a proof that does not show 19 or older is AGE_NOT_PROVEN, and takes no account slot |
+| T1.11 | proofs revealing a gender or a PIN code that the request's rules do not accept, and one hiding the state its rules name | `GENDER_NOT_ALLOWED`, `PIN_CODE_NOT_ALLOWED`, `STATE_NOT_ALLOWED`; no account slot taken | `packages/verifier-sdk`: T1.11: a proof whose gender, PIN code or state the rules do not accept is refused, and takes no account slot |
 | T2.1 | proof for verifier X sent to verifier Y | `CHALLENGE_MISMATCH` | `packages/verifier-sdk`: T2.1 (Phase 4 acceptance): a proof replayed against a different request is CHALLENGE_MISMATCH |
 | T2.2 | the same proof sent twice to X | second: `CHALLENGE_REUSED` | `packages/verifier-sdk`: T2.2, T2.3: the same proof, or a re-randomized copy, cannot answer a request twice |
 | T2.3 | re-randomized copy of an accepted proof | `CHALLENGE_REUSED` | `packages/verifier-sdk`: T2.2, T2.3: the same proof, or a re-randomized copy, cannot answer a request twice |
@@ -147,12 +150,13 @@ Each id with the tests that passed for it.
 | T5.2 | only a copy of the QR | its nullifier for any verifier id, computed offline, matches the holder's (documents A5.2) | `attack-suite`: T5.2: anyone with a copy of the QR computes the holder's nullifier at any site, offline (A5.2) |
 | T5.3 | the same QR at two verifiers | identical `timestamp` and `pubkeyHash` (documents A5.3) | `attack-suite`: T5.3: the same QR at two sites shows the same generation hour and key hash, so colluding sites can match it (A5.3, A6.3) |
 | T5.4 | request served from origin B naming verifier A | holder app refuses | `frontend`: T5.4: a request is refused unless it, and the addresses it names, are on the verifier origin |
-| T6.1 | every proof the holder app makes | exactly the nine signals of section 1.1; `gender`, `pinCode` and `state` are 0 | `frontend`: T6.1: the circuit input reveals only the age bit, and a photo too large for the circuit is refused<br>`apps/demo-rp`: T6.1: what reached the verifiers is a proof and nine signals; gender, PIN code and state are 0 |
-| T6.2 | request asking for gender, PIN code or state | holder app refuses with a typed error | `frontend`: T6.2: a request asking for anything more than "19 or older" is refused |
-| T6.3 | full flow under network capture | no request carries the QR digits, its bytes, the photo or any field value | `apps/demo-rp`: T6.3: no request carries any part of the QR |
+| T6.1 | every proof the holder app makes | exactly the nine signals of section 1.1; `gender`, `pinCode` and `state` are 0 unless the request has a rule on that field | `frontend`: T6.1: the circuit input reveals only what the rules name, and a photo too large for the circuit is refused<br>`apps/demo-rp`: T6.1 (hosted, rules): every proof posted reveals the fields its rules name, and no other<br>`apps/demo-rp`: T6.1: what reached the verifiers is a proof and nine signals; gender, PIN code and state are 0 |
+| T6.2 | request with fields beyond the request format, or with malformed rules | holder app refuses with a typed error | `frontend`: T6.2: a request with anything beyond the request format, or with malformed rules, is refused |
+| T6.3 | full flow under network capture | no request carries the QR digits, its bytes, the photo or any field value the rules do not name | `apps/demo-rp`: T6.3 (hosted): no request the browser made carries any part of either QR it proved with<br>`apps/demo-rp`: T6.3: no request carries any part of the QR |
+| T6.4 | QR that breaks a request's rule on age, gender, PIN code or state | holder app refuses before proving, and nothing is sent; for a QR that meets the rules, it shows exactly the values the proof will reveal | `frontend`: T6.4: a QR that breaks the rules is refused before proving; one that meets them shows exactly what will be revealed<br>`apps/demo-rp`: T6.4 (hosted): a QR that breaks the rules is stopped before proving, and nothing is sent |
 | T7.1 | each public signal changed after proving | Groth16 verification fails (Phase 3); `BAD_PROOF`, except `nullifierSeed` and `signalHash`, which the SDK checks first: `NULLIFIER_SEED_MISMATCH`, `CHALLENGE_MISMATCH` (Phase 4) | `packages/circuit`: T7.1: the proof verifies, and fails if any public signal changes<br>`packages/verifier-sdk`: T7.1, T7.2: a changed public signal or proof element is rejected |
 | T7.2 | each proof element changed | `BAD_PROOF` | `packages/verifier-sdk`: T7.1, T7.2: a changed public signal or proof element is rejected |
 | T7.3 | every signed byte of a synthetic V5 QR flipped, one at a time, in the holder app's parser | signature check fails before proving | `packages/secure-qr`: T7.3: every signed byte, flipped one at a time, fails the signature check |
-| T7.4 | `verifierId`, challenge or `maxAge` changed after proving | `CHALLENGE_MISMATCH` | `packages/verifier-sdk`: T7.4: a request changed after proving is CHALLENGE_MISMATCH |
+| T7.4 | `verifierId`, challenge, `maxAge`, expiry or rules changed after proving | `CHALLENGE_MISMATCH` | `packages/verifier-sdk`: T7.4: a request changed after proving is CHALLENGE_MISMATCH |
 | T7.5 | malformed QR text: not decimal, bad compression, unknown version, truncated | typed parser error | `packages/secure-qr`: T7.5: malformed QR text fails with the same typed codes as in Node |
 | T7.6 | delimiter positions shifted | witness generation fails | `packages/circuit`: T7.6: wrong delimiter positions fail wherever the circuit reads them |

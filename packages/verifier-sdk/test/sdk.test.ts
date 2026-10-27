@@ -1,7 +1,8 @@
 // Phase 4 tests: every failure code, and the Phase 4 rows of
 // docs/THREAT_MODEL.md (T1.1, T1.6, T1.10, T2.1-T2.5, T3.2, T3.3, T3.5, T4.1,
-// T7.1, T7.2, T7.4). Proofs are real, made with Anon Aadhaar's published
-// circuit from synthetic V5 codes signed with ephemeral test keys.
+// T7.1, T7.2, T7.4), plus the rules on gender, PIN code and state (T1.11).
+// Proofs are real, made with Anon Aadhaar's published circuit from synthetic V5
+// codes signed with ephemeral test keys.
 //
 // Run: npm test. The proof tests need the circuit artifacts (cd ../circuit &&
 // npm run fetch, or AA_ARTIFACTS=<dir>); without them they are reported as skipped.
@@ -16,13 +17,19 @@ import {
   FAILURE_CODES,
   MemoryStore,
   RequestError,
+  checkRequest,
+  checkRules,
   checkVerifierId,
   close,
   createVerifier,
+  decodeOutputs,
   nullifierSeedFor,
+  revealFor,
+  ruleFailure,
   signalHashFor,
   type FailureCode,
   type ProofRequest,
+  type Rules,
   type VerifierOptions,
   type VerifyResult,
 } from '../src/index.ts';
@@ -60,11 +67,66 @@ test('nullifier seed and signal hash: field elements, deterministic, bound to ev
   assert.equal(seedX, await nullifierSeedFor(X));
   assert.notEqual(seedX, await nullifierSeedFor(Y));
   assert.ok(BigInt(seedX) < 2n ** 248n);
-  const request: ProofRequest = { version: 1, verifierId: X, challenge: 'ab'.repeat(32), maxAgeSeconds: 3600, expiresAt: G };
+  const request: ProofRequest = { version: 2, verifierId: X, challenge: 'ab'.repeat(32), maxAgeSeconds: 3600, expiresAt: G, rules: { age19: true } };
   const signal = await signalHashFor(request);
-  for (const changed of [{ verifierId: Y }, { challenge: 'cd'.repeat(32) }, { maxAgeSeconds: 3601 }, { expiresAt: G + 1 }]) {
+  for (const changed of [
+    { verifierId: Y },
+    { challenge: 'cd'.repeat(32) },
+    { maxAgeSeconds: 3601 },
+    { expiresAt: G + 1 },
+    { rules: { age19: false } },
+    { rules: { age19: true, gender: ['M' as const] } },
+    { rules: { age19: true, pinCode: ['5600'] } },
+    { rules: { age19: true, state: ['Kerala'] } },
+  ]) {
     assert.notEqual(await signalHashFor({ ...request, ...changed }), signal, JSON.stringify(changed));
   }
+});
+
+test('rules: well formed or INVALID_REQUEST; a request carries them as sent', async () => {
+  const good: Rules[] = [
+    { age19: true },
+    { age19: false },
+    { age19: true, gender: ['M', 'T'], pinCode: ['560034', '1100', '4'], state: ['Karnataka', 'Jammu & Kashmir', "Andaman and Nicobar Islands"] },
+  ];
+  for (const rules of good) assert.equal(checkRules(rules), rules);
+  const bad = [
+    null, [], {}, { age19: 'yes' }, { age19: true, extra: 1 },
+    { age19: true, gender: [] }, { age19: true, gender: ['X'] }, { age19: true, gender: ['M', 'M'] }, { age19: true, gender: 'M' },
+    { age19: true, pinCode: ['012345'] }, { age19: true, pinCode: ['5600341'] }, { age19: true, pinCode: [560034] }, { age19: true, pinCode: Array.from({ length: 101 }, (_, i) => String(100000 + i)) },
+    { age19: true, state: ['Karnataka', 'KARNATAKA '] }, { age19: true, state: ['Dadra and Nagar Haveli and Daman and Diu'] }, { age19: true, state: ['State 9'] }, { age19: true, state: [''] },
+  ];
+  for (const rules of bad) assert.throws(() => checkRules(rules), (e: unknown) => e instanceof RequestError && e.code === 'INVALID_REQUEST', JSON.stringify(rules));
+  const verifier = createVerifier({ verifierId: X, registry: testRegistry([]), now: () => ISSUED_AT });
+  assert.deepEqual((await verifier.createRequest({ maxAgeSeconds: 60 })).rules, { age19: true });
+  const rules: Rules = { age19: false, pinCode: ['5600'] };
+  const request = await verifier.createRequest({ maxAgeSeconds: 60, rules });
+  assert.deepEqual(request.rules, rules);
+  rules.pinCode!.push('1100'); // later changes to the caller's object do not reach the request
+  assert.deepEqual(request.rules, { age19: false, pinCode: ['5600'] });
+  await assert.rejects(verifier.createRequest({ maxAgeSeconds: 60, rules: { age19: true, gender: [] } }), (e: unknown) => e instanceof RequestError);
+  assert.throws(() => checkRequest({ ...request, rules: undefined }), RequestError);
+  assert.throws(() => checkRequest({ ...request, version: 1 }), RequestError);
+});
+
+test("rules: the circuit's outputs, decoded and compared", () => {
+  const packed = (text: string) => [...Buffer.from(text, 'latin1')].reduceRight((v, b) => (v << 8n) | BigInt(b), 0n).toString();
+  const values = decodeOutputs({ gender: '70', pinCode: '560034', state: packed('Karnataka') });
+  assert.deepEqual(values, { gender: 'F', pinCode: '560034', state: 'Karnataka' });
+  assert.deepEqual(decodeOutputs({ gender: '0', pinCode: '0', state: '0' }), {});
+  assert.deepEqual(revealFor({ age19: true, pinCode: ['5'] }), { ageAbove18: true, gender: false, pinCode: true, state: false });
+  const cases: [Rules, string | undefined][] = [
+    [{ age19: true }, undefined],
+    [{ age19: true, gender: ['F', 'T'], pinCode: ['5600'], state: ['  karnataka '] }, undefined],
+    [{ age19: true, gender: ['M'] }, 'GENDER_NOT_ALLOWED'],
+    [{ age19: true, pinCode: ['560035', '56004'] }, 'PIN_CODE_NOT_ALLOWED'],
+    [{ age19: true, state: ['Kerala'] }, 'STATE_NOT_ALLOWED'],
+  ];
+  for (const [rules, failure] of cases) assert.equal(ruleFailure(rules, values), failure, JSON.stringify(rules));
+  // A field with a rule that the proof did not reveal breaks the rule.
+  assert.equal(ruleFailure({ age19: true, state: ['Karnataka'] }, { gender: 'F' }), 'STATE_NOT_ALLOWED');
+  // A PIN code no six digits can make never matches.
+  assert.equal(ruleFailure({ age19: true, pinCode: ['2'] }, decodeOutputs({ gender: '0', pinCode: '23456789', state: '0' })), 'PIN_CODE_NOT_ALLOWED');
 });
 
 test('verifier ids must be origins; requests must be well formed', async () => {
@@ -110,13 +172,31 @@ before(async () => {
   requests.r2 = await issuing.createRequest({ maxAgeSeconds: 3600 });
   requests.r3 = await issuing.createRequest({ maxAgeSeconds: 86400 });
   requests.r4 = await issuing.createRequest({ maxAgeSeconds: 86400 });
-  const proveFor = async (text: string, request: ProofRequest, seedOf = X): Promise<Proof> =>
-    prove(buildInput(text, keys.publicKey, { nullifierSeed: await nullifierSeedFor(seedOf), signalHash: await signalHashFor(request) }), { dir: ARTIFACTS });
+  requests.r5 = await issuing.createRequest({ maxAgeSeconds: 3600, rules: { age19: false, gender: ['F'], pinCode: ['5600', '110001'], state: ['karnataka'] } });
+  requests.r6 = await issuing.createRequest({ maxAgeSeconds: 3600, rules: { age19: true, gender: ['M'] } });
+  requests.r7 = await issuing.createRequest({ maxAgeSeconds: 3600, rules: { age19: true, pinCode: ['110'] } });
+  requests.r8 = await issuing.createRequest({ maxAgeSeconds: 3600, rules: { age19: true, state: ['Karnataka'] } });
+  // Reveals what the request's rules name, as the holder app does, unless told otherwise.
+  const proveFor = async (text: string, request: ProofRequest, seedOf = X, reveal = revealFor(request.rules)): Promise<Proof> =>
+    prove(buildInput(text, keys.publicKey, { nullifierSeed: await nullifierSeedFor(seedOf), signalHash: await signalHashFor(request) }, reveal), { dir: ARTIFACTS });
   proofs.p1 = await proveFor(qr(G), requests.r1); // an adult, fresh QR
   proofs.p2 = await proveFor(qr(G), requests.r2, Y); // the seed of another verifier
   proofs.p3 = await proveFor(qr(G, { dob: '26-10-2010' }), requests.r3); // a minor
   proofs.p4 = await proveFor(qr(G - 3600), requests.r4); // the same person, a QR downloaded an hour earlier
+  // A woman in Bengaluru (another photo, so another person), against four sets of rules.
+  const her = (generatedAt: number) =>
+    makeSyntheticSecureQr(keys.privateKey, {
+      version: 'V5',
+      photo: herPhoto,
+      trailing,
+      fields: { ...syntheticFields({ generatedAt: new Date(generatedAt * 1000) }), gender: 'F', pincode: '560034', state: 'Karnataka' },
+    }).text;
+  proofs.p5 = await proveFor(her(G), requests.r5); // meets the rules
+  proofs.p6 = await proveFor(her(G), requests.r6); // reveals F; the rules accept M
+  proofs.p7 = await proveFor(her(G), requests.r7); // reveals 560034; the rules accept 110...
+  proofs.p8 = await proveFor(her(G), requests.r8, X, { ...revealFor(requests.r8.rules), state: false }); // hides the state the rules name
 });
+const herPhoto = syntheticPhoto(900);
 
 // A verifier holding the given requests, with its clock at `at`.
 function verifierAt(at: number, requestsHeld: ProofRequest[], options: Partial<VerifierOptions> = {}) {
@@ -165,7 +245,7 @@ test('T2.1 (Phase 4 acceptance): a proof replayed against a different request is
 
 test('T7.4: a request changed after proving is CHALLENGE_MISMATCH', NEEDS_PROOFS, async () => {
   const verifier = verifierAt(VERIFY_AT, [requests.r1]);
-  for (const changed of [{ maxAgeSeconds: 86400 }, { expiresAt: requests.r1.expiresAt + 600 }]) {
+  for (const changed of [{ maxAgeSeconds: 86400 }, { expiresAt: requests.r1.expiresAt + 600 }, { rules: { age19: false } }, { rules: { age19: true, gender: ['M' as const] } }]) {
     expectFailure(await verifier.verify(proofs.p1.proof, proofs.p1.publicSignals, { ...requests.r1, ...changed }), 'CHALLENGE_MISMATCH');
   }
   assert.equal((await verifier.verify(proofs.p1.proof, proofs.p1.publicSignals, requests.r1)).ok, true, 'unchanged, it is still accepted');
@@ -241,6 +321,26 @@ test('T3.2, T4.1: the same person again (a re-download) is NULLIFIER_SEEN, unles
   const again = await login.verify(proofs.p4.proof, proofs.p4.publicSignals, requests.r4);
   assert.ok(first.ok && again.ok);
   assert.deepEqual([first.newNullifier, again.newNullifier, first.nullifier === again.nullifier], [true, false, true]);
+});
+
+test("a proof that meets the request's rules is accepted, with the values it revealed, and nothing it did not", NEEDS_PROOFS, async () => {
+  const { proof, publicSignals } = proofs.p5;
+  assert.equal(publicSignals[3], '0', 'the rules do not ask for the age bit, so it is not revealed');
+  const result = await verifierAt(VERIFY_AT, [requests.r5]).verify(proof, publicSignals, requests.r5);
+  assert.ok(result.ok, JSON.stringify(result));
+  assert.deepEqual(result.disclosed, { gender: 'F', pinCode: '560034', state: 'Karnataka' });
+  const ageOnly = await verifierAt(VERIFY_AT, [requests.r1]).verify(proofs.p1.proof, proofs.p1.publicSignals, requests.r1);
+  assert.ok(ageOnly.ok);
+  assert.deepEqual(ageOnly.disclosed, {});
+});
+
+test('T1.11: a proof whose gender, PIN code or state the rules do not accept is refused, and takes no account slot', NEEDS_PROOFS, async () => {
+  const verifier = verifierAt(VERIFY_AT, [requests.r5, requests.r6, requests.r7, requests.r8]);
+  expectFailure(await verifier.verify(proofs.p6.proof, proofs.p6.publicSignals, requests.r6), 'GENDER_NOT_ALLOWED');
+  expectFailure(await verifier.verify(proofs.p7.proof, proofs.p7.publicSignals, requests.r7), 'PIN_CODE_NOT_ALLOWED');
+  expectFailure(await verifier.verify(proofs.p8.proof, proofs.p8.publicSignals, requests.r8), 'STATE_NOT_ALLOWED');
+  // The same person, proving to rules they meet, still gets an account.
+  assert.equal((await verifier.verify(proofs.p5.proof, proofs.p5.publicSignals, requests.r5)).ok, true);
 });
 
 test('every failure code is produced by at least one test above', NEEDS_PROOFS, () => {

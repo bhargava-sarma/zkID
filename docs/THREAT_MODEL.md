@@ -8,7 +8,9 @@ zkID's request protocol, verifier SDK, issuer registry and holder app around it
 **Status:** every test in section 7 exists and passes. Phase 6 added the tests
 that show the undefended attacks succeeding, and
 [ATTACK_REPORT.md](ATTACK_REPORT.md) is generated from a run of all of them
-(`attack-suite/report.mjs`). Phase 6 also found attack A4.6.
+(`attack-suite/report.mjs`). Phase 6 also found attack A4.6. On 2026-10-27,
+after the overhaul, the owner added rules on gender, PIN code and state
+(decision 5); tests from that change say 9 in the Phase column.
 
 ## 1. System
 
@@ -29,7 +31,8 @@ Parts:
 - **Verifier SDK**: `createRequest` and `verify`, with typed failure codes.
 - **Issuer registry**: UIDAI certificates with their validity windows, each
   stored with the Poseidon key hash that the circuit outputs.
-- **Demo relying party**: an age-gated page that uses the SDK.
+- **Demo relying party**: a page that uses the SDK, with rules each visitor
+  sets.
 
 ### 1.1 What the verifier receives
 
@@ -40,8 +43,8 @@ A proof has nine public signals:
 | `pubkeyHash` | output | Poseidon hash of the RSA key that signed the QR | in the registry (`UNTRUSTED_ISSUER`), and `timestamp` inside that key's validity window (`ISSUER_KEY_NOT_VALID`) |
 | `nullifier` | output | hash of `nullifierSeed` and the bytes from the photo to the end of the SHA-padded data | not seen before at this verifier (`NULLIFIER_SEEN`) |
 | `timestamp` | output | QR generation time, rounded down to the hour (IST), as Unix time | not older than the request's `maxAge` (`CREDENTIAL_TOO_OLD`) |
-| `ageAbove18` | output | 1 if the holder's completed age on the QR's generation date was above 18 (that is, from their 19th birthday) and the prover revealed it; otherwise 0 | equals 1 (`AGE_NOT_PROVEN`) |
-| `gender`, `pinCode`, `state` | outputs | 0 unless the prover revealed them | the holder app always sends 0 (A6.1) |
+| `ageAbove18` | output | 1 if the holder's completed age on the QR's generation date was above 18 (that is, from their 19th birthday) and the prover revealed it; otherwise 0 | equals 1 when the request's rules ask for it (`AGE_NOT_PROVEN`) |
+| `gender`, `pinCode`, `state` | outputs | 0 unless the prover revealed them. Revealed: the gender's character code (M, F or T), the PIN code's six digits as a number, and up to 31 bytes of the state's name packed into one integer | with a rule on the field in the request, its value is one the rule accepts (`GENDER_NOT_ALLOWED`, `PIN_CODE_NOT_ALLOWED`, `STATE_NOT_ALLOWED`); the holder app reveals a field only when the request has a rule on it (A6.1) |
 | `nullifierSeed` | public input | per-verifier value | equals this verifier's seed (`NULLIFIER_SEED_MISMATCH`) |
 | `signalHash` | public input | value the proof commits to | equals the hash of the stored request (`CHALLENGE_MISMATCH`) |
 
@@ -52,15 +55,15 @@ verifier sees only the outputs.
 
 ### 1.2 Decisions made in this document
 
-The brief leaves these open. The owner accepted all four on 2026-10-26; Phases 4
-and 5 implement them.
+The brief leaves the first four open. The owner accepted them on 2026-10-26;
+Phases 4 and 5 implement them. The fifth came on 2026-10-27.
 
 1. **The verifier id is the verifier's HTTPS origin.** The request QR or link
    holds a URL on that origin. The holder app fetches the request from it and
    posts the proof back to the same origin. TLS then authenticates the id,
    instead of the holder app trusting whatever a QR says. `nullifierSeed` is a
    hash of the id; `signalHash` is a hash of the whole request (id, challenge,
-   `maxAge`, expiry).
+   `maxAge`, expiry, rules).
 2. **Failure codes.** The brief's `CUTOFF_TOO_LATE` has no meaning under option
    A, where the circuit fixes the cutoff at 18; `AGE_NOT_PROVEN` replaces it.
    Added: `ISSUER_KEY_NOT_VALID` and `NULLIFIER_SEED_MISMATCH`.
@@ -69,6 +72,14 @@ and 5 implement them.
    signals.
 4. **The holder app, not the SDK, limits disclosure.** A malicious verifier
    controls its own SDK.
+5. **Rules, and what they reveal.** A request carries rules: 19 or older, and
+   the genders, PIN codes and states it accepts. The circuit outputs gender, PIN
+   code and state as values, so a rule on one of them reveals the holder's
+   value to the verifier, not only that it passes. The holder app checks the
+   rules on the device and reveals nothing when they fail; otherwise it shows
+   the person each value it will reveal, and proves only when they go on. For
+   gender this reverses the brief's "name and gender proofs are removed", at
+   the owner's request ([DECISIONS.md](DECISIONS.md), section 10).
 
 ## 2. Assumptions
 
@@ -90,23 +101,23 @@ From the brief:
 
 | | Adversary | Has | Wants |
 |---|---|---|---|
-| A1 | Forger | no UIDAI-signed QR, or one that does not show 18+ | an accepted proof |
+| A1 | Forger | no UIDAI-signed QR, or one that does not show 18+ or does not meet the verifier's rules | an accepted proof |
 | A2 | Replayer | someone else's proof: captured, screenshotted, or relayed live | acceptance at another verifier, or later |
 | A3 | Lender | an adult's QR, given to a minor | accounts for the minor |
 | A4 | Sybil | their own QR | several accounts at one verifier |
 | A5 | Linker | records of two or more colluding verifiers | to tell whether two proofs came from one person |
-| A6 | Malicious verifier | a request the holder will answer | more than "18+" |
+| A6 | Malicious verifier | a request the holder will answer | more than its rules need, such as the value of a field it has no rule on |
 | A7 | Tamperer | write access to the QR, proof, public signals or request in transit | any accepted change |
 
 ## 4. Goals
 
 | Goal | Status under option A | How | Tests |
 |---|---|---|---|
-| G1 Unforgeability | **Yes**, under S1–S4 | SHA-256 and RSA over all signed bytes in-circuit; key hash in the registry; timestamp inside the key's window; pinned artifacts | T1.1–T1.10, T7.1–T7.3, T7.5, T7.6 |
+| G1 Unforgeability | **Yes**, under S1–S4 | SHA-256 and RSA over all signed bytes in-circuit; key hash in the registry; timestamp inside the key's window; revealed values checked against the rules; pinned artifacts | T1.1–T1.11, T7.1–T7.3, T7.5, T7.6 |
 | G2 Verifier binding | **Yes** for replay; **No** for live relay (A2.5) | `signalHash` is a hash of the request; challenges are single-use and short-lived | T2.1–T2.6, T7.4 |
 | G3 Per-verifier uniqueness | **Partly** | per-verifier `nullifierSeed`; nullifier from the photo bytes, the bytes after them and the signed data's length. Fails on a photo update, on any update that changes the signed data's length, possibly on QRs from other sources, and against anyone who holds the QR | T2.5, T3.1, T3.2, T3.4, T4.1–T4.3, T5.1, T5.2, T5.4 |
 | G4 Freshness | **Yes**, to the hour | the SDK compares the public `timestamp` with the request's `maxAge` | T3.3, T3.5 |
-| G5 Minimal disclosure | **Partly**: the QR's generation hour and the UIDAI key are also revealed | the holder app sets only the age reveal flag | T1.10, T5.3, T6.1, T6.2 |
+| G5 Minimal disclosure | **Partly**: the QR's generation hour and the UIDAI key are also revealed, and a rule on gender, PIN code or state reveals that value (decision 5) | the holder app sets only the reveal flags the request's rules need, and reveals nothing when the QR breaks them | T1.10, T5.3, T6.1, T6.2, T6.4 |
 | G6 Client-side only | **Yes**, under S7 | the holder app proves locally and sends only the proof | T6.3 |
 
 The brief put the freshness check (`minCredentialDate`) inside the circuit.
@@ -119,7 +130,8 @@ found, across any update that changes the signed data's length, A4.6), and
 "cannot be linked across sites" holds only against parties who have not seen
 the person's QR. Option A adds a third: "I am 18 or older" can only be proved
 from the 19th birthday, because the circuit's `ageAbove18` means a completed
-age above 18.
+age above 18. Rules add a fourth: "never reveals anything else" holds for age
+alone; a rule on gender, PIN code or state reveals that value.
 
 ## 5. Attacks
 
@@ -136,8 +148,9 @@ where a test is listed, the test shows it succeeding.
 | A1.6 | Sign with UIDAI's current key | **No** | assumption S1 | none |
 | A1.7 | Swap the verification key, circuit artifacts or registry | Yes | pinned by SHA-256 at build time | T1.7 |
 | A1.8 | Forge a proof without a valid witness | Yes, under S3 and S9 | Groth16 soundness | none (assumption) |
-| A1.9 | Use a genuine QR of someone under 18, or hide the age bit | Yes | `ageAbove18` must be 1, which the circuit outputs only from the 19th birthday | T1.10 |
+| A1.9 | Use a genuine QR of someone under 18, or hide the age bit | Yes | when the rules ask for age, `ageAbove18` must be 1, which the circuit outputs only from the 19th birthday | T1.10 |
 | A1.10 | Exploit unusual signed data: a DOB not in `DD-MM-YYYY`, or non-digits | Partly | fails closed when the DOB is not 10 bytes (the circuit checks the delimiter 11 bytes after its start); digits are not range-checked, so this relies on UIDAI's formatting (S4) | T1.8, T1.9 |
+| A1.11 | Pass a verifier's rule on gender, PIN code or state with a QR that breaks it, or by hiding the field | Yes | the circuit outputs the signed value; the SDK compares it with the request's rules, and a field the rules name that the proof hides fails | T1.11 |
 | A2.1 | Submit a captured proof to another verifier | Yes | different `signalHash` and `nullifierSeed` | T2.1, T2.5 |
 | A2.2 | Submit it again to the same verifier | Yes | single-use challenge | T2.2 |
 | A2.3 | Re-randomize the proof and resubmit | Yes | replay detection keys on the challenge | T2.3 |
@@ -158,7 +171,7 @@ where a test is listed, the test shows it succeeding.
 | A5.3 | Match the QR's generation hour and key hash across sites | **No** under option A | both are public outputs; a holder who uses a separate fresh QR per site avoids matching hours | T5.3 |
 | A5.4 | Correlate IP addresses or timing | **No** | out of scope | none |
 | A5.5 | Request a proof under another site's id, to learn the user's nullifier there | Yes | the id is the origin the request came from (decision 1) | T5.4 |
-| A6.1 | Ask the holder app to reveal gender, PIN code or state | Yes | the app refuses, and always sets those reveal flags to 0 | T6.1, T6.2 |
+| A6.1 | Ask the holder app to reveal gender, PIN code or state | Partly | the app reveals a field only when the request has a rule on it, checks the rule on the device first (a QR that breaks it reveals nothing) and shows the person each value before proving; but a rule written to admit everyone, such as all three genders or the PIN prefixes 1 to 9, learns the value of everyone who goes on | T6.1, T6.2, T6.4 |
 | A6.2 | Learn the DOB or exact age | Yes | only the 18+ bit is output | T6.1 |
 | A6.3 | Learn the QR's generation hour and UIDAI key | **No** under option A | always public | T5.3 |
 | A6.4 | Get the QR itself | Yes, under S7 | the app never sends it | T6.3 |
@@ -174,7 +187,10 @@ where a test is listed, the test shows it succeeding.
 - **Lending and impersonation** (A3.1, A3.3) beyond one account per site per
   QR. Preventing them needs biometrics or liveness.
 - **Full KYC**: address, AML screening, liveness.
-- **Name and gender proofs**: removed.
+- **Name proofs**: removed. Gender, PIN code and state are proved only as a
+  verifier's rules, and are then revealed by value (decision 5).
+- **Rules as yes or no.** Proving only that a gender, PIN code or state passes a
+  rule, without revealing it, needs a new circuit.
 - **18-year-olds, and any other cutoff** (accepted by the owner at stop gate 3,
   2026-10-26). Under option A the circuit only outputs "completed age above 18
   on the QR's generation date", which becomes true on the 19th birthday. Holders
@@ -184,7 +200,9 @@ where a test is listed, the test shows it succeeding.
 - **Revocation.** Secure QR has none; freshness is the only control.
 - **Network anonymity** (A5.4) and **denial of service**.
 - **Every holder.** Photos above 924–987 bytes cannot be proved
-  (issuer-research, section 7.4), a DOB not in `DD-MM-YYYY` fails (T1.8), and
+  (issuer-research, section 7.4), a DOB not in `DD-MM-YYYY` fails (T1.8), as
+  does a state name over 31 bytes or a PIN code field that is not 6 bytes
+  (`packages/circuit` tests), and
   proving in a desktop browser needs about 5 GB of memory (2.6 GB on one
   thread). The one phone tried ran out of memory with several threads and
   proved in 79 s with one; phones with less memory are untested
@@ -214,6 +232,7 @@ signed with ephemeral test keys.
 | T1.8 | 3 | DOB field of 4 bytes (year only) | witness generation fails | passes in `packages/circuit` tests |
 | T1.9 | 3 | DOB of 10 bytes with non-digits | outputs recorded; documents the missing range check | passes in `packages/circuit` tests |
 | T1.10 | 3 and 4 | QR generated the day before, on, and after the holder's 18th and 19th birthdays; an adult with the age flag off | `ageAbove18` is 1 only on and after the 19th birthday (Phase 3); `AGE_NOT_PROVEN` for every 0 (Phase 4) | passes in `packages/circuit` and `packages/verifier-sdk` tests; Phase 1: `check_controls.mjs` (under 18; flag off) |
+| T1.11 | 9 | proofs revealing a gender or a PIN code that the request's rules do not accept, and one hiding the state its rules name | `GENDER_NOT_ALLOWED`, `PIN_CODE_NOT_ALLOWED`, `STATE_NOT_ALLOWED`; no account slot taken | passes in `packages/verifier-sdk` tests |
 | T2.1 | 4 | proof for verifier X sent to verifier Y | `CHALLENGE_MISMATCH` | passes in `packages/verifier-sdk` tests |
 | T2.2 | 4 | the same proof sent twice to X | second: `CHALLENGE_REUSED` | passes in `packages/verifier-sdk` tests |
 | T2.3 | 4 | re-randomized copy of an accepted proof | `CHALLENGE_REUSED` | passes in `packages/verifier-sdk` tests |
@@ -232,13 +251,14 @@ signed with ephemeral test keys.
 | T5.2 | 6 | only a copy of the QR | its nullifier for any verifier id, computed offline, matches the holder's (documents A5.2) | passes in `attack-suite` tests (computed with the circuit's witness generator) |
 | T5.3 | 6 | the same QR at two verifiers | identical `timestamp` and `pubkeyHash` (documents A5.3) | passes in `attack-suite` tests |
 | T5.4 | 5 | request served from origin B naming verifier A | holder app refuses | passes in `frontend/src/holder` tests (`WRONG_ORIGIN`) |
-| T6.1 | 5 | every proof the holder app makes | exactly the nine signals of section 1.1; `gender`, `pinCode` and `state` are 0 | passes in `frontend/src/holder` tests (the circuit input) and the `apps/demo-rp` end-to-end test (every proof posted) |
-| T6.2 | 5 | request asking for gender, PIN code or state | holder app refuses with a typed error | passes in `frontend/src/holder` tests (`UNSUPPORTED_REQUEST`) |
-| T6.3 | 5 | full flow under network capture | no request carries the QR digits, its bytes, the photo or any field value | passes in the `apps/demo-rp` end-to-end test: headless Chromium, every request of the pages and the proving worker captured |
+| T6.1 | 5 and 9 | every proof the holder app makes | exactly the nine signals of section 1.1; `gender`, `pinCode` and `state` are 0 unless the request has a rule on that field | passes in `frontend/src/holder` tests (the circuit input) and the `apps/demo-rp` end-to-end tests (every proof posted, with and without rules) |
+| T6.2 | 5 and 9 | request with fields beyond the request format, or with malformed rules | holder app refuses with a typed error | passes in `frontend/src/holder` tests (`UNSUPPORTED_REQUEST`, `BAD_REQUEST`) |
+| T6.3 | 5 | full flow under network capture | no request carries the QR digits, its bytes, the photo or any field value the rules do not name | passes in the `apps/demo-rp` end-to-end tests: headless Chromium, every request of the pages and the proving worker captured |
+| T6.4 | 9 | QR that breaks a request's rule on age, gender, PIN code or state | holder app refuses before proving, and nothing is sent; for a QR that meets the rules, it shows exactly the values the proof will reveal | passes in `frontend/src/holder` tests and the `apps/demo-rp` hosted end-to-end test |
 | T7.1 | 3 and 4 | each public signal changed after proving | Groth16 verification fails (Phase 3); `BAD_PROOF`, except `nullifierSeed` and `signalHash`, which the SDK checks first: `NULLIFIER_SEED_MISMATCH`, `CHALLENGE_MISMATCH` (Phase 4) | passes in `packages/circuit` and `packages/verifier-sdk` tests |
 | T7.2 | 4 | each proof element changed | `BAD_PROOF` | passes in `packages/verifier-sdk` tests |
 | T7.3 | 5 | every signed byte of a synthetic V5 QR flipped, one at a time, in the holder app's parser | signature check fails before proving | passes in `packages/secure-qr` tests (`web.mjs`, the holder app's parser) |
-| T7.4 | 4 | `verifierId`, challenge or `maxAge` changed after proving | `CHALLENGE_MISMATCH` | passes in `packages/verifier-sdk` tests |
+| T7.4 | 4 | `verifierId`, challenge, `maxAge`, expiry or rules changed after proving | `CHALLENGE_MISMATCH` | passes in `packages/verifier-sdk` tests |
 | T7.5 | 5 | malformed QR text: not decimal, bad compression, unknown version, truncated | typed parser error | passes in `packages/secure-qr` tests, for the Node parser and the holder app's (`web.mjs`) |
 | T7.6 | 3 | delimiter positions shifted | witness generation fails | passes in `packages/circuit` tests; Phase 1: `check_controls.mjs` (DOB hint) |
 
@@ -257,3 +277,6 @@ table serves a goal.
 - Can a phone with less than 8 GB of memory prove? An 8-core phone with 8 GB
   or more proved in 79 s on one thread (circuit-spec, section 5).
 - Does a verifier need UIDAI registration? (issuer-research, section 8)
+- How does UIDAI write state names, such as Delhi or Dadra and Nagar Haveli and
+  Daman and Diu? A state rule must match its spelling, and a name over 31
+  bytes cannot be proved at all.
