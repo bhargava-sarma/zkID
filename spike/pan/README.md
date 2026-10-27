@@ -43,7 +43,39 @@ signal hash, as in zkID's request protocol.
 
 ## Results
 
-RESULTS
+Measured on 2026-10-27 in a 4-core Intel Xeon container (2.3 GHz, 16 GB),
+snarkjs 0.7.6, next to Anon Aadhaar's circuit as measured on the same kind of
+machine (`spike/circuit-cost/results`, docs/circuit-spec.md section 5).
+
+| | PAN record (this circuit) | Aadhaar QR (Anon Aadhaar) |
+|---|---|---|
+| Constraints | 1,989,660 | 1,040,218 |
+| Proving key | 1,133 MB (536 MB gzipped) | 612 MB (296 MB in gzip parts) |
+| Witness wasm | 11.7 MB | 10.5 MB |
+| Node, 4 threads | 120 s to prove (7 s witness), 6.7 GB peak | 34 s, 3.8 GB |
+| Node, 1 thread | 105 s (4 s witness), 3.5 GB | |
+| Chromium, 4 threads | 74 s (78 s in a second run), 9.0 GB for the browser | 52 s, 4.8 GB |
+| Chromium, 1 thread | 118 s (127 s), 4.7 GB | about 80 s, 2.6 GB |
+| Setup (`build.mjs`, no ceremony) | 18 minutes, about 11 GB | |
+
+Checked:
+
+- **Synthetic records** (`npm test`, 8 tests): the outputs equal what
+  `record.mjs` computes outside the circuit; the date-of-birth cutoff holds to
+  the day; the nullifier is stable for a PAN and uid and differs per verifier
+  and per person; one changed byte anywhere in the record, a changed signature,
+  another key, or a wrong hint fails; and validly signed records outside the
+  layout (another document type, another status, two different PAN numbers,
+  another organization) fail.
+- **The owner's real record** (`PAN_XML=...`, run locally, nothing printed):
+  read, checked, and accepted by the circuit, with the outputs it should give.
+
+What it means for phones: proving on one thread takes about 1.5 times as long
+as an Aadhaar proof, and needs 4.7 GB rather than 2.6 GB. The owner's 8-core
+phone proved an Aadhaar QR in 79 s on one thread, so a PAN proof there would
+take about two minutes if it fits in memory; phones with less memory probably
+cannot. Several threads need 9 GB, too much for any phone. The first proof
+also downloads 536 MB rather than 296 MB.
 
 ## Open questions before building it for real
 
