@@ -49,7 +49,8 @@ The holder app reads the QR and proves in the browser; the verifier SDK runs at
 the website; nothing stores an identity attribute. The end-to-end test checks
 that no request carries any part of the QR (THREAT_MODEL, T6.3). The holder app
 is static files, so the deployment has no backend; v1's `backend/` went, the
-last of it a health endpoint nothing called.
+last of it a health endpoint nothing called. Websites that use the SDK keep
+state, as the hosted demo's shops do (section 9).
 
 ## 5. Freshness in the SDK, not the circuit
 
@@ -108,3 +109,31 @@ this branch removed v1's circuits (`backend/circuits`), its test issuer, which
 signed v1's JSON credentials (`tools/test-issuer`), and the Phase 1 spike's v1
 benchmark script. The spike reads v1's circuit from the tag when it compares
 constraint counts.
+
+## 9. The hosted demo
+
+On 2026-10-27 the owner asked for a public demo that people can try with their
+own Aadhaar QR. It is one Vercel project, built from `apps/demo-rp`
+([its README](../apps/demo-rp/README.md#hosted-demo-vercel)):
+
+- **The holder app's demo build** on one domain. The QR is read and proved in
+  the browser, as in every build; the hosted end-to-end test checks that no
+  request carries any part of it.
+- **Two demo shops** on two other domains, so that the same QR visibly gets
+  unrelated nullifiers at two websites.
+- **A TEST issuer key made by each deployment**, so that people without an
+  Aadhaar QR can try it: the shops hand out synthetic QRs signed with it,
+  labeled as test data in the file name and the fields. Only that deployment's
+  shops and holder build trust it. The issuer registry still refuses test keys
+  in production, the production build of the holder app has none, and the
+  key's private half is in the deployment's function, never in git.
+- **State in Upstash Redis**, because a Vercel function keeps nothing between
+  requests. Each shop stores what a website using the SDK must: requests, used
+  challenges and nullifiers, plus a session per browser. Nullifiers are kept 7
+  days, so after a week the same person can open a second account at a shop; a
+  real website keeps them as long as the account. No QR, field of it or proof
+  is stored.
+
+The holder's domain is a setting (`ZKID_DEMO_HOLDER`), not the project's
+production domain: Vercel picks that from the project's domains by length, and
+a shop's could win.

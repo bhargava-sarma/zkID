@@ -3,13 +3,14 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 // The demo mode (npm run dev:demo, npm run build:demo) also trusts the local
-// demo's TEST issuer key, which apps/demo-rp/setup-demo.mjs writes. The key is
-// compiled in, so every other build contains no test key at all (THREAT_MODEL A1.4).
+// demo's TEST issuer key, which apps/demo-rp/setup-demo.mjs writes, or the one in
+// ZKID_DEMO_ISSUER_FILE (the hosted demo's build sets it). The key is compiled
+// in, so every other build contains no test key at all (THREAT_MODEL A1.4).
 function demoKeys(mode) {
   if (mode !== 'demo') return null;
-  const file = new URL('../apps/demo-rp/.demo/test-issuer.json', import.meta.url);
+  const file = process.env.ZKID_DEMO_ISSUER_FILE ?? new URL('../apps/demo-rp/.demo/test-issuer.json', import.meta.url);
   if (!fs.existsSync(file)) {
-    throw new Error('Demo mode, but apps/demo-rp/.demo/test-issuer.json is missing: run `npm run setup` in apps/demo-rp first.');
+    throw new Error(`Demo mode, but ${file} is missing: run \`npm run setup\` in apps/demo-rp first.`);
   }
   return JSON.parse(fs.readFileSync(file, 'utf8')).keys;
 }

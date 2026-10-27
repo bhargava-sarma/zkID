@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "allowJs": true,
+    "checkJs": false,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "rootDir": "../../..",
+    "outDir": "../.build",
+    "noEmitOnError": true
+  },
+  "files": ["handler.ts", "../qrcode.d.ts", "../../../packages/verifier-sdk/src/snarkjs.d.ts"]
+}

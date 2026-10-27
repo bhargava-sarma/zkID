@@ -125,7 +125,7 @@ packages/circuit/          Anon Aadhaar's circuit artifacts, pinned by SHA-256; 
 packages/issuer-registry/  UIDAI's keys with validity windows; refuses test and compromised keys in production
 packages/verifier-sdk/     createRequest and verify, with typed failure codes (TypeScript)
 frontend/                  The holder app (src/App.jsx, src/holder/), and the phone benchmark page (public/bench/)
-apps/demo-rp/              Demo website: request, request QR, verify, one account per nullifier; end-to-end test
+apps/demo-rp/              Demo website: request, request QR, verify, one account per nullifier; hosted demo for Vercel; end-to-end tests
 attack-suite/              Tests of the attacks zkID does not defend; generates docs/ATTACK_REPORT.md
 docs/                      Issuer research, threat model, attack report, circuit specification, decisions
 tools/repo-checks/         No private key is tracked; the threat model is consistent
@@ -139,6 +139,11 @@ See [apps/demo-rp/README.md](apps/demo-rp/README.md): a local holder app, two
 demo websites, and a synthetic QR signed by a TEST key generated on your
 machine. Real QRs are never needed, and must never be committed.
 
+The same README sets up the hosted demo: the holder app and two demo websites
+in one Vercel project, which anyone can try with their own Aadhaar QR (read and
+proved in their browser, never sent) or with a synthetic sample QR the websites
+hand out, signed by a TEST key that each deployment makes.
+
 ## Tests and the attack suite
 
 ```bash
@@ -147,7 +152,7 @@ machine. Real QRs are never needed, and must never be committed.
 (cd packages/issuer-registry && npm test)   # registry checks
 (cd packages/verifier-sdk && npm test)      # every failure code, with real proofs
 (cd frontend && npm test)                   # holder app: request and QR checks, circuit input
-(cd apps/demo-rp && npm run test:e2e)       # three proofs in headless Chromium, network capture
+(cd apps/demo-rp && npm run test:e2e)       # six proofs in headless Chromium, local and hosted builds, network capture
 (cd attack-suite && npm test)               # the attacks zkID does not defend, shown working
 node attack-suite/report.mjs                # all of the above that the threat model cites -> docs/ATTACK_REPORT.md
 node --test "tools/repo-checks/*.test.mjs"  # no private key tracked; threat model consistent

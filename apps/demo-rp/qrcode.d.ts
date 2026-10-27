@@ -1,4 +1,7 @@
-// The part of qrcode's API that server.ts uses (the package ships no types).
+// The part of qrcode's API that the demo uses (the package ships no types).
 declare module 'qrcode' {
-  export function toDataURL(text: string, options?: { errorCorrectionLevel?: 'L' | 'M' | 'Q' | 'H'; margin?: number; scale?: number }): Promise<string>;
+  type Options = { errorCorrectionLevel?: 'L' | 'M' | 'Q' | 'H'; margin?: number; scale?: number };
+  type Segments = string | { data: string; mode: 'numeric' | 'alphanumeric' | 'byte' }[];
+  export function toDataURL(text: Segments, options?: Options): Promise<string>;
+  export function toBuffer(text: Segments, options?: Options): Promise<Buffer>;
 }
