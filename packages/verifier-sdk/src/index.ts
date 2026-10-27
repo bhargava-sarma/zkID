@@ -8,8 +8,10 @@ import fs from 'node:fs';
 import * as snarkjs from 'snarkjs';
 import { checkRegistry, findKey, type Registry } from '../../issuer-registry/index.ts';
 import { RequestError, checkVerifierId, nullifierSeedFor, signalHashFor, type ProofRequest } from './request.ts';
+import { canonicalRules, checkRules, decodeOutputs, disclosedFor, ruleFailure, type Disclosed, type Rules } from './rules.ts';
 
 export { RequestError, checkRequest, checkVerifierId, nullifierSeedFor, signalHashFor, type ProofRequest } from './request.ts';
+export { GENDERS, checkRules, decodeOutputs, revealFor, ruleFailure, type Disclosed, type Gender, type Rules } from './rules.ts';
 
 export const FAILURE_CODES = [
   'BAD_PROOF',
@@ -20,13 +22,18 @@ export const FAILURE_CODES = [
   'UNTRUSTED_ISSUER',
   'ISSUER_KEY_NOT_VALID',
   'AGE_NOT_PROVEN',
+  'GENDER_NOT_ALLOWED',
+  'PIN_CODE_NOT_ALLOWED',
+  'STATE_NOT_ALLOWED',
   'CREDENTIAL_TOO_OLD',
   'NULLIFIER_SEEN',
 ] as const;
 export type FailureCode = (typeof FAILURE_CODES)[number];
 
+// `disclosed`: the values of the fields the request's rules name, which the
+// proof revealed (rules.ts).
 export type VerifyResult =
-  | { ok: true; nullifier: string; newNullifier: boolean; issuerKeyId: string; credentialTime: number }
+  | { ok: true; nullifier: string; newNullifier: boolean; issuerKeyId: string; credentialTime: number; disclosed: Disclosed }
   | { ok: false; code: FailureCode; detail: string };
 
 // Anon Aadhaar's public signals, in snarkjs order.
@@ -82,7 +89,18 @@ const isProof = (proof: unknown) => {
   return typeof p === 'object' && p !== null && isPoint(p.pi_a, 1) && isPoint(p.pi_b, 2) && isPoint(p.pi_c, 1);
 };
 const sameRequest = (a: ProofRequest, b: ProofRequest) =>
-  a.version === b.version && a.verifierId === b.verifierId && a.challenge === b.challenge && a.maxAgeSeconds === b.maxAgeSeconds && a.expiresAt === b.expiresAt;
+  a.version === b.version &&
+  a.verifierId === b.verifierId &&
+  a.challenge === b.challenge &&
+  a.maxAgeSeconds === b.maxAgeSeconds &&
+  a.expiresAt === b.expiresAt &&
+  canonicalRules(a.rules) === canonicalRules(b.rules);
+
+const RULE_DETAIL = {
+  GENDER_NOT_ALLOWED: "the proof does not show a gender the request's rules accept",
+  PIN_CODE_NOT_ALLOWED: "the proof does not show a PIN code the request's rules accept",
+  STATE_NOT_ALLOWED: "the proof does not show a state the request's rules accept",
+};
 
 export interface VerifierOptions {
   verifierId: string; // this verifier's origin
@@ -103,16 +121,19 @@ export function createVerifier(options: VerifierOptions) {
   const vkey = loadVerificationKey();
   const seed = nullifierSeedFor(verifierId);
 
-  async function createRequest({ maxAgeSeconds }: { maxAgeSeconds: number }): Promise<ProofRequest> {
+  // `rules`: what the QR must show. A rule on gender, PIN code or state reveals
+  // the holder's value of that field to this verifier (rules.ts).
+  async function createRequest({ maxAgeSeconds, rules = { age19: true } }: { maxAgeSeconds: number; rules?: Rules }): Promise<ProofRequest> {
     if (!Number.isSafeInteger(maxAgeSeconds) || maxAgeSeconds <= 0) {
       throw new RequestError('INVALID_REQUEST', 'maxAgeSeconds must be a positive whole number of seconds');
     }
     const request: ProofRequest = {
-      version: 1,
+      version: 2,
       verifierId,
       challenge: crypto.randomBytes(32).toString('hex'),
       maxAgeSeconds,
       expiresAt: now() + ttl,
+      rules: structuredClone(checkRules(rules)),
     };
     await store.putRequest(request);
     return request;
@@ -163,15 +184,18 @@ export function createVerifier(options: VerifierOptions) {
     if (credentialTime < key.notBefore || credentialTime > key.notAfter) {
       return fail('ISSUER_KEY_NOT_VALID', `the QR's generation time is outside the validity of key ${key.id}`);
     }
-    if (s.ageAbove18 !== '1') {
+    if (request.rules.age19 && s.ageAbove18 !== '1') {
       return fail('AGE_NOT_PROVEN', 'the proof does not show a completed age above 18 (19 or older) when the QR was generated');
     }
+    const disclosed = disclosedFor(request.rules, decodeOutputs(s));
+    const broken = ruleFailure(request.rules, disclosed);
+    if (broken) return fail(broken, RULE_DETAIL[broken]);
     if (now() - credentialTime > request.maxAgeSeconds) return fail('CREDENTIAL_TOO_OLD', 'the QR is older than the request allows');
 
     // 5. One account per person per verifier.
     const newNullifier = await store.addNullifier(s.nullifier);
     if (!newNullifier && onSeenNullifier === 'reject') return fail('NULLIFIER_SEEN', 'this person already has an account here');
-    return { ok: true, nullifier: s.nullifier, newNullifier, issuerKeyId: key.id, credentialTime };
+    return { ok: true, nullifier: s.nullifier, newNullifier, issuerKeyId: key.id, credentialTime, disclosed };
   }
 
   return { verifierId, createRequest, verify };

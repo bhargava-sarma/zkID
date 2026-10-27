@@ -3,7 +3,7 @@
 Known security problems in this repository and what was done about them.
 Checked on 2026-10-20; sections 2 and 4 updated on 2026-10-26, when this branch
 removed the v1 server code and the chain code, and sections 1 and 4 on
-2026-10-27, for the hosted demo. The v1 code is preserved at tag
+2026-10-27, for the hosted demo and the rules on gender, PIN code and state. The v1 code is preserved at tag
 `v1-mock-issuer-demo` (commit `e94fcb5`).
 
 ## 1. The v1 demo issuer's private key is public
@@ -105,7 +105,11 @@ this branch the code behind them is removed; what replaces it is described in
   removed. v2 proves UIDAI's own signature on the Aadhaar Secure QR.
 - **Name and gender proofs disclose the claim.** The claimed gender and name hash
   are public signals; a name hash can be dictionary-tested. *This branch:* no
-  name or gender proofs. The holder app reveals only the age bit (test T6.1).
+  name proofs. Since 2026-10-27 a website may set rules on gender, PIN code and
+  state, and the proof then discloses the holder's value of each such field,
+  as v1's did; the holder app shows those values before proving, reveals no
+  other field (test T6.1), and reveals nothing when the QR breaks a rule (T6.4).
+  See [docs/DECISIONS.md](docs/DECISIONS.md), section 10.
 - **Proofs are bearer tokens.** No verifier challenge, nullifier, expiry or
   revocation: a copied proof or QR code verifies for anyone. *This branch:* a
   proof is bound to one verifier and one expiring challenge, with a

@@ -1,16 +1,24 @@
 # Demo relying party
 
-An age-gated page ("Demo shop") that uses the zkID verifier SDK end to end. It
-never sees a QR: it issues a request, the holder app proves on the person's
-device, and only the proof comes back. One account per nullifier.
+A page ("Demo shop") that uses the zkID verifier SDK end to end. Each visitor
+sets the shop's rules for their own visit: 19 or older, and the genders, PIN
+codes and states it accepts. It never sees a QR: it issues a request with those
+rules, the holder app checks them and proves on the person's device, and only
+the proof comes back. One account per nullifier. A rule on gender, PIN code or
+state reveals the holder's value of that field
+([DECISIONS](../../docs/DECISIONS.md), section 10); the result screen shows
+what the shop learned.
 
 It runs two ways:
 
 - **Locally** (`server.ts`): one shop per process, state in memory. `--demo`
   makes it trust a TEST issuer key that this machine generated.
 - **Hosted** (`vercel/`): the holder app and two shops on Vercel, for anyone to
-  try with their own Aadhaar QR or a synthetic sample. State is in Upstash
+  try with their own Aadhaar QR or a synthetic test QR. State is in Upstash
   Redis. See [Hosted demo](#hosted-demo-vercel).
+
+The pages (`views.ts`, and the holder app's `frontend/src/App.css`) load no
+fonts or scripts from anywhere else.
 
 ## Run it locally
 
@@ -43,7 +51,11 @@ out of memory with several threads. Rerunning
 
 What to look for:
 
-- Verifier A grants account #1 and shows the start of its nullifier.
+- Verifier A grants account #001 and shows the start of its nullifier.
+- Under **Your rules**, pick Female and save: the synthetic QR (a man) is now
+  stopped in the holder app before proving, with `GENDER_NOT_ACCEPTED`. Rules
+  that the QR meets show their values in the holder app before you prove, and
+  on the shop's result screen after.
 - Verifier B, proved to with the same QR, shows a different nullifier: the two
   sites cannot match their records by it.
 - In a second browser (or after clearing cookies), proving to A again is
@@ -64,8 +76,9 @@ One Vercel project, built by `vercel/build.mjs`, serves:
   the holder app reads it and proves in the browser, and sends only the proof.
 - **A demo shop on every other domain** of the project. A shop's verifier id is
   its origin, so two domains are two shops, and the same QR gets unrelated
-  nullifiers at them. Each shop's page links to two sample QRs, synthetic and
-  signed with the TEST key: an adult, and someone 17 years old today.
+  nullifiers at them. Each shop's page makes test QRs, synthetic and signed
+  with the TEST key: an adult or someone 17 years old today, with the gender,
+  PIN code and state picked.
 
 The build compiles the shops (`app.ts`, `vercel/handler.ts`) and the packages
 they import to JavaScript, makes a new TEST issuer key, builds the holder app
@@ -120,13 +133,14 @@ QR at most 7 days old and expire after 15 minutes.
 
 | Route | |
 |---|---|
-| `GET /` | the page, with this browser session's last result |
-| `POST /start`, `POST /start?qr` | a new request; redirects to the holder app, or to `/qr` |
+| `GET /` | the page, with this browser session's rules and last result |
+| `POST /rules` | saves this session's rules (form fields `age19`, `gender`, `pin`, `state`) |
+| `POST /start`, `POST /start?qr` | a new request with this session's rules; redirects to the holder app, or to `/qr` |
 | `GET /qr` | the request as a QR; polls `/zkid/status` |
 | `GET /zkid/request/<challenge>` | the request, for the holder app (CORS: the holder origin only) |
 | `POST /zkid/response/<challenge>` | `{ proof, publicSignals }` from the holder app; runs `verify` |
 | `GET /zkid/status` | this session's result |
-| `GET /sample-qr.png`, `GET /sample-qr.png?minor` | a synthetic QR signed with the TEST key, adult or under 19 (hosted demo only) |
+| `GET /sample-qr.png?age=adult\|minor&gender=M\|F\|T&pin=<6 digits>&state=<state>` | a synthetic QR signed with the TEST key (hosted demo only); by default an adult man, 560034, Karnataka |
 
 The server logs only "accepted" or "refused" with a failure code. The hosted
 shops answer the same routes.
@@ -147,8 +161,10 @@ made by the pages or the proving worker carries any part of the QR (T6.3).
 
 `e2e/hosted.test.ts` builds the hosted demo and serves a copy of its output
 from outside the repository, so a file the function needs but the build left
-out fails here. With sample QRs downloaded from shop A, it makes three more
-proofs (account #1 at A, a different nullifier at B, `NULLIFIER_SEEN` at A
-again), and checks that the under-19 sample is stopped before proving, that no
-request carries any part of the QR, and that without `ZKID_DEMO_HOLDER` the
-shops say what to set.
+out fails here. With test QRs made by shop A, it makes four more proofs
+(account #001 at A, a different nullifier at B, `NULLIFIER_SEEN` at A again,
+and one under rules on gender, PIN code and state set through the shop's form),
+and checks that the under-19 QR and a QR that breaks a gender rule are stopped
+before proving (T6.4), that each proof reveals exactly the fields its rules
+name (T6.1), that no request carries any other part of either QR (T6.3), and
+that without `ZKID_DEMO_HOLDER` the shops say what to set.
