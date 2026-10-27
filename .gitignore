@@ -36,6 +36,8 @@ frontend/public/circuit/
 frontend/public/bench/snarkjs.min.js
 # Local demo: an ephemeral test issuer and synthetic QR images (apps/demo-rp/setup-demo.mjs)
 apps/demo-rp/.demo/
+# Hosted demo build (apps/demo-rp/vercel/build.mjs); holds that deployment's private TEST key
+apps/demo-rp/.build/
 # Anon Aadhaar's circuit artifacts (fetch-artifacts.mjs) and setup-check downloads
 packages/circuit/artifacts/
 packages/circuit/setup/work/

@@ -2,7 +2,8 @@
 
 Known security problems in this repository and what was done about them.
 Checked on 2026-10-20; sections 2 and 4 updated on 2026-10-26, when this branch
-removed the v1 server code and the chain code. The v1 code is preserved at tag
+removed the v1 server code and the chain code, and sections 1 and 4 on
+2026-10-27, for the hosted demo. The v1 code is preserved at tag
 `v1-mock-issuer-demo` (commit `e94fcb5`).
 
 ## 1. The v1 demo issuer's private key is public
@@ -25,7 +26,11 @@ credentials with it. It was the only issuer the v1 verifier page and the v1
   v2 trusts only UIDAI's Secure QR keys, from the issuer registry.
 - Test keys are generated in memory where they are used (the tests and the
   local demo's setup) and their private halves are never written to disk; v1's
-  test issuer is removed from this branch. `.gitignore`
+  test issuer is removed from this branch. The one exception is the hosted
+  demo's TEST key: `apps/demo-rp/vercel/build.mjs` makes one per deployment and
+  writes its private half into that deployment's function (through the ignored
+  `apps/demo-rp/.build/`), which signs synthetic sample QRs with it. Only that
+  deployment's demo shops and holder build trust it. `.gitignore`
   excludes `*.pem`, `*.key`, `*.p12` and `*.pfx`;
   [`tools/repo-checks/no_private_keys.test.mjs`](tools/repo-checks/no_private_keys.test.mjs)
   fails if a tracked file holds a private key.
@@ -110,8 +115,10 @@ this branch the code behind them is removed; what replaces it is described in
   plaintext name and an unsalted SHA-256 of the 12-digit Aadhaar number, which
   can be brute-forced quickly. `ocr.js` and `db.js` log names. If a real card was
   ever uploaded to a deployed v1, those rows hold personal data, and only the
-  owner of that Supabase project can delete them. *This branch:* no database
-  and no upload endpoint; this branch has no server code at all.
+  owner of that Supabase project can delete them. *This branch:* no upload
+  endpoint, and nothing stores a name, an ID number or any other field of a QR.
+  The hosted demo's shops keep per-site codes (nullifiers) and sessions in
+  Redis, for at most 7 days ([docs/DECISIONS.md](docs/DECISIONS.md), section 9).
 - **The server sees the whole card at issuance**, and `/api/issue-credential`
   returns the raw ID number to the browser. *This branch:* the QR is read and
   proved on the holder's device, and only the proof is sent (test T6.3, an
