@@ -145,7 +145,7 @@ apps/demo-rp/              Demo website: rules each visitor sets, request QR, ve
 attack-suite/              Tests of the attacks zkID does not defend; generates docs/ATTACK_REPORT.md
 docs/                      Issuer research, threat model, attack report, circuit specification, decisions
 tools/repo-checks/         No private key is tracked; the threat model is consistent
-spike/                     Phase 1 measurements
+spike/                     Phase 1 measurements; a prototype for DigiLocker PAN records (spike/pan)
 security/                  Keys whose private half is public; never trust them
 ```
 
