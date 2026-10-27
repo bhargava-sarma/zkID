@@ -52,7 +52,10 @@ await new Promise((r) => server.listen(4400, r));
 let peak = 0;
 const rss = () => {
   try {
-    return execFileSync('ps', ['-o', 'rss=', '-C', 'chrome,headless_shell,chromium'], { encoding: 'utf8' }).split('\n').filter(Boolean).reduce((a, b) => a + Number(b), 0) * 1024;
+    return execFileSync('ps', ['-eo', 'rss=,comm='], { encoding: 'utf8' })
+      .split('\n')
+      .filter((line) => /\s(headless_shell|chrome|chromium)/.test(line))
+      .reduce((sum, line) => sum + Number(line.trim().split(/\s+/)[0]), 0) * 1024;
   } catch {
     return 0;
   }
