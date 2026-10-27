@@ -38,6 +38,9 @@ frontend/public/bench/snarkjs.min.js
 apps/demo-rp/.demo/
 # Hosted demo build (apps/demo-rp/vercel/build.mjs); holds that deployment's private TEST key
 apps/demo-rp/.build/
+# PAN prototype: circuit build, powers of tau, dev proving key (GBs); real records stay in local/
+spike/pan/build/
+spike/pan/local/
 # Anon Aadhaar's circuit artifacts (fetch-artifacts.mjs) and setup-check downloads
 packages/circuit/artifacts/
 packages/circuit/setup/work/
