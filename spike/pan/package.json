@@ -1,0 +1,21 @@
+{
+  "name": "@zkid/spike-pan",
+  "private": true,
+  "description": "Prototype: prove claims from a DigiLocker PAN Verification Record (XMLDSig) in a Groth16 circuit, and measure the cost.",
+  "type": "module",
+  "scripts": {
+    "constants": "node gen-constants.mjs",
+    "build": "node build.mjs",
+    "test": "node --test \"test/*.test.mjs\"",
+    "bench": "node bench.mjs"
+  },
+  "dependencies": {
+    "@xmldom/xmldom": "0.9.8",
+    "@zk-email/circuits": "6.1.1",
+    "circomlib": "2.0.5",
+    "poseidon-lite": "0.3.0",
+    "qrcode": "1.5.4",
+    "snarkjs": "0.7.6",
+    "xml-crypto": "6.1.2"
+  }
+}

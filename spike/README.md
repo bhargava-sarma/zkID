@@ -1,7 +1,12 @@
-# Phase 1 spikes
+# Spikes
 
-Throwaway-quality code that answers the Phase 1 feasibility questions. The
+Throwaway-quality code that answers feasibility questions. The Phase 1
 findings are in [docs/issuer-research.md](../docs/issuer-research.md).
+
+## pan: DigiLocker PAN records
+
+A prototype circuit for DigiLocker's PAN Verification Record, with tests and
+timings: [pan/README.md](pan/README.md).
 
 ## secure-qr
 
