@@ -58,6 +58,8 @@ with bb.js's WebAssembly backend (what a browser runs), and headless Chromium
 | Node, 4 threads | 16 s, 1.2 GB | 120 s, 6.7 GB |
 | Chromium, 1 thread | 40 s, 0.9 GB | 118 s, 4.7 GB (4.1 GB of it anonymous) |
 | Chromium, 4 threads | 20 s, 1.0 GB | 74 s, 9.0 GB |
+| The owner's phone, 1 thread | 34.5 s | 213 s |
+| The owner's phone, 8 threads | 13.6 s | not tried: 9 GB |
 | Proof | 14.6 KB | 0.8 KB |
 | Building it | 4 s to compile | 2 minutes to compile, 18 for a dev setup |
 
@@ -65,8 +67,14 @@ Node's memory is the process's peak resident memory; Chromium's is the
 browser's peak anonymous memory (`RssAnon`) for Noir, and resident memory for
 circom, as `../pan` measured it. The witness takes under a second in both.
 
-On a phone: pending. The test page is in `web/`, published at
-https://bhargava-sarma.github.io/zkID-pan-bench/noir/.
+**On a phone.** The owner's phone (8 cores, at least 8 GB, Android 16, Chrome
+156), with the test page in `web/` as published at
+https://bhargava-sarma.github.io/zkID-pan-bench/noir/: the witness in 0.8 s,
+then a valid proof in 34.5 s on one thread and 13.6 s on eight. The first
+proof also took 13.9 s to fetch and load Barretenberg's setup points; the
+second, 1.3 s. The same phone took 213 s for the circom proof, after 72 s to
+download its key, and takes 79 s for an Aadhaar proof: there, a PAN proof in
+Noir is faster than an Aadhaar one in circom.
 
 Checked:
 
