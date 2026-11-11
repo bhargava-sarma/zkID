@@ -67,8 +67,9 @@ Checked:
   another key, or a wrong hint fails; and validly signed records outside the
   layout (another document type, another status, two different PAN numbers,
   another organization) fail.
-- **The owner's real record** (`PAN_XML=...`, run locally, nothing printed):
-  read, checked, and accepted by the circuit, with the outputs it should give.
+- **The owner's real record**, and the same record fetched again nine days
+  later (`PAN_XML=...`, run locally, nothing printed): each read, checked, and
+  accepted by the circuit, with the outputs it should give.
 
 What it means for phones: proving on one thread takes about 1.5 times as long
 as an Aadhaar proof, and needs 4.7 GB rather than 2.6 GB. The owner's 8-core
@@ -79,10 +80,14 @@ also downloads 536 MB rather than 296 MB.
 
 ## Open questions before building it for real
 
-1. **Is `uid` stable?** It was the same in two downloads 5 seconds apart, and
-   differs from the `uid` on the same person's driving licence. If it changes
-   over time, the nullifier does too, and so does "one account per person". A
-   download days later would tell.
+1. **Is `uid` stable?** So far, yes. It was the same in two downloads 5
+   seconds apart; in a download nine days later, which was DigiLocker's stored
+   copy byte for byte; and after the owner had DigiLocker fetch the record
+   again from the Income Tax Department, which gave a new `verifiedOn`, QR
+   image and signature. The circuit accepted that record too, with the same
+   nullifier. It differs from the `uid` on the same person's driving licence.
+   Untested: whether a second DigiLocker account for the same person would
+   get another `uid`, and so another nullifier.
 2. **The nullifier without `uid` would leak the PAN.** PAN numbers of
    individuals have about 4.6 billion values, fewer when the surname's
    initial is known, so a verifier could brute-force `Poseidon(seed, PAN)` in
