@@ -71,12 +71,14 @@ Checked:
   later (`PAN_XML=...`, run locally, nothing printed): each read, checked, and
   accepted by the circuit, with the outputs it should give.
 
-What it means for phones: proving on one thread takes about 1.5 times as long
-as an Aadhaar proof, and needs 4.7 GB rather than 2.6 GB. The owner's 8-core
-phone proved an Aadhaar QR in 79 s on one thread, so a PAN proof there would
-take about two minutes if it fits in memory; phones with less memory probably
-cannot. Several threads need 9 GB, too much for any phone. The first proof
-also downloads 536 MB rather than 296 MB.
+**On a phone.** The owner's phone (8 cores, at least 8 GB, Android 16, Chrome
+156) proved a synthetic record on one thread in 213 s, after 6 s for the
+witness and 72 s to download and unpack the key, using the test page in
+bhargava-sarma/zkID-pan-bench. The same phone proves an Aadhaar QR in 79 s on
+one thread, so there a PAN proof takes about 2.7 times as long, more than the
+1.5 times measured above. It needs about 4.7 GB rather than 2.6 GB, so phones
+with less memory probably cannot make one. Several threads need 9 GB, too much
+for any phone. The first proof also downloads 536 MB rather than 296 MB.
 
 ## Open questions before building it for real
 
