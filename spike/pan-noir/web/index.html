@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>zkID PAN phone test (Noir)</title>
+<style>
+  :root {
+    --paper: #efece6; --ink: #151515; --muted: #6b6760; --line: #d6d1c7;
+    --card: #f8f6f2; --accent: #ff4f00; --ok: #1d7a3a; --bad: #b3261e;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper: #141414; --ink: #ecebe8; --muted: #9a968e; --line: #33312d; --card: #1d1c1a; --ok: #5fc27e; --bad: #ff8a80; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.5 system-ui, sans-serif; }
+  main { max-width: 34rem; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font: 600 1.35rem/1.2 var(--mono); letter-spacing: -0.01em; margin: 8px 0 4px; }
+  .label { font: 600 0.72rem/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 22px 0 8px; }
+  p { margin: 0 0 10px; }
+  ol { margin: 0; padding-left: 1.2rem; }
+  li { margin-bottom: 4px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-top: 12px; }
+  .warn { border-left: 4px solid var(--accent); }
+  button { font: 600 1rem var(--mono); border: 0; border-radius: 10px; padding: 16px; width: 100%; cursor: pointer; }
+  #start { background: var(--accent); color: #fff; margin-top: 18px; }
+  #start:disabled { opacity: 0.45; cursor: default; }
+  .copy { background: var(--ink); color: var(--paper); margin-top: 12px; }
+  #stage { font: 600 1rem var(--mono); }
+  #elapsed, #step { font: 0.85rem var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+  pre { font: 0.85rem/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="label">zkID · test only · Noir</div>
+  <h1>PAN phone test</h1>
+  <p>Times how long this phone takes to prove claims from a DigiLocker PAN record with the Noir circuit, first on one thread, then on all cores. It uses a made-up record: nothing about you is used, and nothing leaves this phone.</p>
+
+  <div class="card warn" id="crash" hidden>
+    <pre id="crash-text"></pre>
+    <button class="copy" data-copy="crash-text">Copy this</button>
+  </div>
+
+  <div class="label">Before you start</div>
+  <ol>
+    <li>Use Wi-Fi: the first run downloads about 25 MB.</li>
+    <li>Plug in the charger and close other apps.</li>
+    <li>Keep the screen on and this tab open until it finishes, about 2 minutes.</li>
+  </ol>
+
+  <button id="start">Start test</button>
+
+  <div class="card" id="status" hidden>
+    <div id="stage"></div>
+    <div id="elapsed"></div>
+    <div id="step"></div>
+  </div>
+
+  <div class="card" id="result" hidden>
+    <pre id="result-text"></pre>
+    <button class="copy" data-copy="result-text">Copy results</button>
+  </div>
+</main>
+<script type="module" src="./main.js"></script>
+</body>
+</html>

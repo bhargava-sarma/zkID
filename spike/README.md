@@ -8,6 +8,12 @@ findings are in [docs/issuer-research.md](../docs/issuer-research.md).
 A prototype circuit for DigiLocker's PAN Verification Record, with tests and
 timings: [pan/README.md](pan/README.md).
 
+## pan-noir: the same, in Noir
+
+The PAN circuit rewritten in Noir and proved with Barretenberg's UltraHonk: no
+proving key or setup ceremony, and about three times faster in a browser, in a
+fifth of the memory. [pan-noir/README.md](pan-noir/README.md).
+
 ## secure-qr
 
 The Secure QR parser began here and is now

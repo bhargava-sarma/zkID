@@ -255,6 +255,16 @@ template PanVerifier(n, k, maxDocBytes, windowBytes) {
     order[3].a <== panAt;
     order[3].b <== windowBytes - panLen;
 
+    // And inside the hashed bytes: what lies after them is not signed. (A
+    // record shorter than the window would otherwise let a prover write
+    // fields there.)
+    component paddedLengthBits = Num2Bits(13);
+    paddedLengthBits.in <== docPaddedLength;
+    component inHashed = LessEqThan(13);
+    inHashed.in[0] <== panAt + panLen;
+    inHashed.in[1] <== docPaddedLength;
+    inHashed.out === 1;
+
     component genderShift = VarShiftLeft(windowBytes, genderLen);
     genderShift.in <== window;
     genderShift.shift <== genderAt;
