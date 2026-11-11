@@ -103,6 +103,20 @@ test('the circuit refuses validly signed records outside the layout', NEEDS_WASM
   }
 });
 
+test('fields placed after the hashed bytes are refused', NEEDS_WASM, async () => {
+  // A signed record without its QR image is short enough that bytes after its
+  // SHA-256 padding still fall inside the field window. Markup written there
+  // is not covered by the signature, so it must not count.
+  const record = readRecord(await makeRecord(issuer, { qr: '' }));
+  const input = circuitInput(record, OPTIONS);
+  assert.equal(await fails(input), false, 'positive control');
+  const at = Number(input.docPaddedLength) + 8;
+  const fake = Buffer.from(` gender="MALE" uid="${'b'.repeat(32)}"><PAN num="TESTP0000T" verifiedOn="01-01-2030 10:00:00"></PAN>`, 'latin1');
+  assert.ok(at + fake.length < 1280);
+  const doc = input.doc.map((b, i) => (i >= at && i < at + fake.length ? String(fake[i - at]) : b));
+  assert.ok(await fails({ ...input, doc, genderAt: String(at), uidAt: String(at + fake.indexOf(' uid="')), panAt: String(at + fake.indexOf('<PAN')) }));
+});
+
 test('the real record, if given (PAN_XML): read, checked, and accepted by the circuit', { skip: !process.env.PAN_XML && 'PAN_XML not set' }, async () => {
   const record = readRecord(fs.readFileSync(process.env.PAN_XML, 'utf8'));
   if (!fs.existsSync(WASM)) return;

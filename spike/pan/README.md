@@ -32,7 +32,11 @@ Its address fields are empty.
 - the record's fixed head: a PAN record (`type="PANCR"`), issued through
   DigiLocker by the Income Tax Department, `status="A"`;
 - the date of birth, gender, `uid` and `<PAN>` attributes where the prover's
-  hints point, each matched by its exact markup, the two PAN numbers equal.
+  hints point, each matched by its exact markup, the two PAN numbers equal,
+  all inside the hashed bytes. (Until 2026-11-11 the circuit did not check
+  that last part: for a signed record shorter than 1,280 bytes, a prover could
+  have written the attributes after its end, where the signature does not
+  reach. Real records are about 3 KB.)
 
 Public outputs: the key's hash (as Anon Aadhaar computes it), a per-verifier
 nullifier `Poseidon(seed, PAN, uid)`, the hour DigiLocker verified the PAN
@@ -49,7 +53,7 @@ machine (`spike/circuit-cost/results`, docs/circuit-spec.md section 5).
 
 | | PAN record (this circuit) | Aadhaar QR (Anon Aadhaar) |
 |---|---|---|
-| Constraints | 1,989,660 | 1,040,218 |
+| Constraints | 1,989,686 (the timings below were made with 26 fewer) | 1,040,218 |
 | Proving key | 1,133 MB (536 MB gzipped) | 612 MB (296 MB in gzip parts) |
 | Witness wasm | 11.7 MB | 10.5 MB |
 | Node, 4 threads | 120 s to prove (7 s witness), 6.7 GB peak | 34 s, 3.8 GB |
@@ -60,23 +64,26 @@ machine (`spike/circuit-cost/results`, docs/circuit-spec.md section 5).
 
 Checked:
 
-- **Synthetic records** (`npm test`, 8 tests): the outputs equal what
+- **Synthetic records** (`npm test`, 9 tests): the outputs equal what
   `record.mjs` computes outside the circuit; the date-of-birth cutoff holds to
   the day; the nullifier is stable for a PAN and uid and differs per verifier
   and per person; one changed byte anywhere in the record, a changed signature,
-  another key, or a wrong hint fails; and validly signed records outside the
+  another key, or a wrong hint fails; validly signed records outside the
   layout (another document type, another status, two different PAN numbers,
-  another organization) fail.
+  another organization) fail; and attributes written after a short record's
+  hashed bytes fail.
 - **The owner's real record**, and the same record fetched again nine days
   later (`PAN_XML=...`, run locally, nothing printed): each read, checked, and
   accepted by the circuit, with the outputs it should give.
 
-What it means for phones: proving on one thread takes about 1.5 times as long
-as an Aadhaar proof, and needs 4.7 GB rather than 2.6 GB. The owner's 8-core
-phone proved an Aadhaar QR in 79 s on one thread, so a PAN proof there would
-take about two minutes if it fits in memory; phones with less memory probably
-cannot. Several threads need 9 GB, too much for any phone. The first proof
-also downloads 536 MB rather than 296 MB.
+**On a phone.** The owner's phone (8 cores, at least 8 GB, Android 16, Chrome
+156) proved a synthetic record on one thread in 213 s, after 6 s for the
+witness and 72 s to download and unpack the key, using the test page in
+bhargava-sarma/zkID-pan-bench. The same phone proves an Aadhaar QR in 79 s on
+one thread, so there a PAN proof takes about 2.7 times as long, more than the
+1.5 times measured above. It needs about 4.7 GB rather than 2.6 GB, so phones
+with less memory probably cannot make one. Several threads need 9 GB, too much
+for any phone. The first proof also downloads 536 MB rather than 296 MB.
 
 ## Open questions before building it for real
 

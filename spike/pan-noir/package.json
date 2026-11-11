@@ -1,0 +1,22 @@
+{
+  "name": "zkid-pan-noir-spike",
+  "private": true,
+  "type": "module",
+  "description": "Prototype: the PAN circuit in Noir, proved with Barretenberg (UltraHonk). Not wired into the app.",
+  "scripts": {
+    "pretest": "node gen-constants.mjs --check",
+    "test": "node --test \"test/*.test.mjs\"",
+    "constants": "node gen-constants.mjs",
+    "web": "node web-data.mjs && vite build --config vite.config.mjs"
+  },
+  "dependencies": {
+    "@aztec/bb.js": "5.3.0",
+    "@noir-lang/acvm_js": "1.0.0",
+    "@noir-lang/noir_js": "1.0.0",
+    "@noir-lang/noir_wasm": "1.0.0",
+    "@noir-lang/noirc_abi": "1.0.0"
+  },
+  "devDependencies": {
+    "vite": "5.4.21"
+  }
+}
