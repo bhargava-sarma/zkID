@@ -261,7 +261,7 @@ test('T2.4: a request answered after it expired is CHALLENGE_EXPIRED', NEEDS_PRO
   expectFailure(await verifier.verify(proofs.p1.proof, proofs.p1.publicSignals, requests.r1), 'CHALLENGE_EXPIRED');
 });
 
-test('an Aadhaar proof for a request that accepts only PAN records is DOCUMENT_NOT_ACCEPTED, and does not use up the request', NEEDS_PROOFS, async () => {
+test('T2.8: an Aadhaar proof for a request that accepts only PAN records is DOCUMENT_NOT_ACCEPTED, and does not use up the request', NEEDS_PROOFS, async () => {
   const store = new MemoryStore();
   await store.putRequest(requests.r9);
   const verifier = createVerifier({ verifierId: X, registry, store, now: () => VERIFY_AT });

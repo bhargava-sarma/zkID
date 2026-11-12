@@ -34,10 +34,24 @@ const ymd = (ddmmyyyy) => Number(`${ddmmyyyy.slice(6, 10)}${ddmmyyyy.slice(3, 5)
 const ist = (seconds) =>
   new Date(seconds * 1000).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' });
 
+// How far a request's issue time may be from this device's clock: a day back,
+// ten minutes ahead.
+const ISSUED_BEFORE = 86400;
+const ISSUED_AHEAD = 600;
+
 // Reads the record and checks it against the trusted keys and the request.
 // Returns what the prover needs, and what the page may show: when DigiLocker
 // verified the PAN, and the values the proof will reveal (`disclosed`).
 export async function checkPan(xml, keys, request, now = Date.now() / 1000) {
+  // The proof's age cutoff is the request's day in India, 19 years back. A
+  // request dated another day would ask about another birthday, and a verifier
+  // could learn the date of birth over several requests (THREAT_MODEL A6.5).
+  if (request.issuedAt < now - ISSUED_BEFORE || request.issuedAt > now + ISSUED_AHEAD) {
+    throw new HolderError(
+      'REQUEST_NOT_CURRENT',
+      `${request.verifierId}'s request is dated ${ist(request.issuedAt)}, not today: a PAN proof would show your age on that day. Nothing was proved or sent. If this device's clock is wrong, correct it, then start again from the website.`,
+    );
+  }
   let record;
   try {
     record = await readRecord(xml, keys);

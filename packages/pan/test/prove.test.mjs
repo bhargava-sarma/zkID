@@ -17,12 +17,12 @@ const sha256 = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex'
 const pinned = JSON.parse(fs.readFileSync(new URL('../artifacts/vk.json', import.meta.url), 'utf8'));
 const vk = Buffer.from(pinned.vk, 'base64');
 
-test('the pinned verification key belongs to the pinned program', () => {
+test('T1.17: the pinned verification key belongs to the pinned program', () => {
   assert.equal(sha256(fs.readFileSync(new URL('../artifacts/pan_verifier.json', import.meta.url))), pinned.programSha256);
   assert.equal(sha256(vk), pinned.vkSha256);
 });
 
-test('a proof verifies, says what the record holds, and fails if anything in it changes', async () => {
+test('T7.7: a proof verifies, says what the record holds, and fails if anything in it changes', async () => {
   const issuer = testIssuer();
   const record = await readRecord(await makeRecord(issuer, { dob: '15-06-2000', gender: 'TRANSGENDER' }), [testKey(issuer)]);
   const options = { dobCutoff: 20071027, nullifierSeed: 1111n, signalHash: 2222n, revealGender: true };

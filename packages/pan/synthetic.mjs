@@ -40,9 +40,10 @@ const SHA256_WITH_RSA = seq(oid('1.2.840.113549.1.1.11'), der(0x05));
 
 export const TEST_SUBJECT = 'TEST ISSUER (zkID, not DigiLocker)';
 
-// A TEST signing key and its self-signed certificate.
-export function testIssuer() {
-  const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+// A TEST signing key and its self-signed certificate: a new key, or the one
+// given (the demo shops sign their sample records with their build's TEST key).
+export function testIssuer(privateKey = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey) {
+  const publicKey = crypto.createPublicKey(privateKey);
   const now = new Date();
   const tbs = seq(
     der(0xa0, der(0x02, Buffer.from([2]))),

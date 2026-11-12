@@ -1,5 +1,5 @@
 // Shared by the end-to-end tests: reading QR images, driving the holder app in
-// a browser, and the parts of a QR that no request may carry.
+// a browser, and the parts of a QR or a PAN record that no request may carry.
 import assert from 'node:assert/strict';
 import jsqr from 'jsqr';
 // @ts-expect-error pngjs ships no types
@@ -33,14 +33,37 @@ export function qrNeedles(digits: string) {
   return needles;
 }
 
+// The same for a PAN record's XML: its values, its digest and signature, its QR.
+export function panNeedles(xml: string) {
+  const [, uid, name, dob] = /<Person uid="([^"]+)"[^>]* name="([^"]+)" dob="([^"]+)"/.exec(xml)!;
+  const [, pan, verifiedOn] = /<PAN num="([^"]+)" verifiedOn="([^"]+)"/.exec(xml)!;
+  const text = (tag: string) => new RegExp(`<${tag}>([^<]+)</${tag}>`).exec(xml)![1];
+  const [signature, qr] = [text('SignatureValue'), text('QRMeta')];
+  const needles = [uid, name, dob, pan, verifiedOn, text('DigestValue'), signature.slice(0, 40), signature.slice(200, 240), qr.slice(0, 40), qr.slice(1000, 1040)];
+  assert.ok(needles.every((n) => n.length >= 8));
+  return needles;
+}
+
+// The credential in a file: a PAN record's XML, or an image of an Aadhaar QR.
+export const credentialOf = (file: string) => (file.endsWith('.xml') ? 'pan' : 'aadhaar');
+
+// In the holder app, once the request is shown: picks the credential, if the
+// request accepts more than one, and opens the file.
+export async function openCredential(page: any, file: string) {
+  await page.waitForSelector('text=asks you to prove');
+  const chooser = await page.$(`[data-testid=choose-${credentialOf(file)}]`);
+  if (chooser) await chooser.click();
+  await page.setInputFiles('input[type=file]', file);
+}
+
 // The flows through a holder app whose pages start with `holderPrefix`, proving
-// with the QR image `qrFile` unless a flow is given another.
+// with the QR image `qrFile` unless a flow is given another file: a QR image or
+// a PAN record.
 export function holderFlows(context: () => Promise<any>, holderPrefix: string, qrFile: string) {
   // In the holder app, from the request to the verifier's answer.
   async function proveOnHolder(page: any, file = qrFile) {
-    await page.waitForSelector('text=asks you to prove');
-    await page.setInputFiles('input[type=file]', file);
-    await page.waitForSelector('[data-testid=qr-ok]');
+    await openCredential(page, file);
+    await page.waitForSelector(credentialOf(file) === 'pan' ? '[data-testid=pan-ok]' : '[data-testid=qr-ok]');
     await page.click('button:has-text("Prove and send")');
     await page.waitForSelector('[data-testid=answer]', { timeout: PROOF_TIMEOUT });
     return page.textContent('[data-testid=answer]');
@@ -64,7 +87,7 @@ export function holderFlows(context: () => Promise<any>, holderPrefix: string, q
 
   // The verifier's page shows the request as a QR; a second page (the phone)
   // opens what the QR says and proves; the first page picks up the result.
-  async function proveViaRequestQr(verifier: string) {
+  async function proveViaRequestQr(verifier: string, file = qrFile) {
     const ctx = await context();
     const desktop = await ctx.newPage();
     await desktop.goto(`${verifier}/`);
@@ -73,7 +96,7 @@ export function holderFlows(context: () => Promise<any>, holderPrefix: string, q
     assert.ok(target.startsWith(`${holderPrefix}?request=`), target);
     const phone = await ctx.newPage();
     await phone.goto(target);
-    const answer = await proveOnHolder(phone);
+    const answer = await proveOnHolder(phone, file);
     await desktop.waitForSelector('[data-testid=granted], [data-testid=refused]', { timeout: 30_000 });
     const status = await statusOf(desktop);
     await Promise.all([phone.close(), desktop.close()]);

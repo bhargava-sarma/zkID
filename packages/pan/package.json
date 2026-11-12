@@ -13,7 +13,7 @@
     "@noir-lang/acvm_js": "1.0.0",
     "@noir-lang/noir_js": "1.0.0",
     "@noir-lang/noirc_abi": "1.0.0",
-    "@xmldom/xmldom": "0.9.8",
+    "@xmldom/xmldom": "0.9.12",
     "@zkpassport/poseidon2": "0.6.2",
     "qrcode": "1.5.4"
   },

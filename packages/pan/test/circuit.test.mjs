@@ -36,7 +36,7 @@ async function failure(input) {
   }
 }
 
-test('outputs equal what input.mjs computes outside the circuit, gender only when revealed', async () => {
+test('T5.6, T6.1: outputs equal what input.mjs computes outside the circuit, gender only when revealed', async () => {
   const record = await read({ dob: '15-06-2000', gender: 'FEMALE' });
   for (const revealGender of [false, true]) {
     const options = { ...OPTIONS, revealGender };
@@ -51,14 +51,14 @@ test('every gender the record can hold', async () => {
   }
 });
 
-test('the date of birth against the cutoff, to the day', async () => {
+test('T1.15: the date of birth against the cutoff, to the day', async () => {
   const record = await read({ dob: '15-06-2000' });
   for (const [dobCutoff, bornBy] of [[20000614, '0'], [20000615, '1'], [20000616, '1'], [19991231, '0'], [99991231, '1']]) {
     assert.equal((await run(circuitInput(record, { ...OPTIONS, dobCutoff }))).bornBy, bornBy, String(dobCutoff));
   }
 });
 
-test('the nullifier: the same for the same PAN and uid, different for another verifier or another person', async () => {
+test('T4.4, T5.5: the nullifier: the same for the same PAN and uid, different for another verifier or another person', async () => {
   const uid = 'a'.repeat(32);
   const n = async (record, seed = OPTIONS.nullifierSeed) => (await run(circuitInput(record, { ...OPTIONS, nullifierSeed: seed }))).nullifier;
   const first = await read({ uid });
@@ -67,7 +67,7 @@ test('the nullifier: the same for the same PAN and uid, different for another ve
   assert.notEqual(await n(first), await n(await read({ uid, pan: 'TESTP0001T' })));
 });
 
-test('the circuit refuses a changed record, signature or key, and wrong hints', async () => {
+test('T1.13: the circuit refuses a changed record, signature or key, and wrong hints', async () => {
   const record = await read({});
   const input = circuitInput(record, OPTIONS);
   assert.equal(await failure(input), null, 'positive control');
@@ -85,7 +85,7 @@ test('the circuit refuses a changed record, signature or key, and wrong hints', 
   assert.ok(await failure({ ...input, pan_at: record.hints.panAt - 1 }), 'pan');
 });
 
-test('the circuit refuses validly signed records outside the layout', async () => {
+test('T1.14: the circuit refuses validly signed records outside the layout', async () => {
   const cases = {
     'another document type': { edit: (x) => x.replace('type="PANCR"', 'type="DRVLC"') },
     'a status other than A': { status: 'I' },
@@ -97,7 +97,7 @@ test('the circuit refuses validly signed records outside the layout', async () =
   }
 });
 
-test('attributes written after the hashed bytes of a short record are refused', async () => {
+test('T1.14: attributes written after the hashed bytes of a short record are refused', async () => {
   // Without its QR image a signed record is short enough that bytes after its
   // SHA-256 padding still fall inside the field window. They are not signed.
   const input = circuitInput(await read({ qr: '' }), OPTIONS);

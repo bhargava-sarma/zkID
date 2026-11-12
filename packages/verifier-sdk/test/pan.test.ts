@@ -7,12 +7,18 @@
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
   MemoryStore,
+  PAN_VK_SHA256,
   RequestError,
   checkRequest,
   close,
   createVerifier,
+  loadPanVerificationKey,
   nullifierSeedFor,
   panDobCutoff,
   signalHashFor,
@@ -45,7 +51,7 @@ function expectFailure(result: VerifyResult, code: FailureCode) {
 
 // ---- Without proofs -------------------------------------------------------------
 
-test("a PAN proof's age cutoff: the request's day in India, 19 years earlier", () => {
+test("T1.15: a PAN proof's age cutoff: the request's day in India, 19 years earlier", () => {
   assert.equal(panDobCutoff(ISSUED_AT), 20071111);
   // 23:00 UTC on 31 December is already 1 January in India.
   assert.equal(panDobCutoff(Date.parse('2026-12-31T23:00:00Z') / 1000), 20080101);
@@ -71,6 +77,21 @@ test('requests: which documents they accept, and no PIN code or state rule when 
   }
   const request = await verifier.createRequest({ maxAgeSeconds: 60, documents: ['pan'] });
   assert.throws(() => checkRequest({ ...request, issuedAt: request.expiresAt + 1 }), RequestError);
+});
+
+test('T1.17: the SDK loads only the pinned PAN verification key', () => {
+  const file = new URL('../../pan/artifacts/vk.json', import.meta.url);
+  const pinned = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.equal(crypto.createHash('sha256').update(loadPanVerificationKey(file)).digest('hex'), PAN_VK_SHA256);
+  const changed = Buffer.from(pinned.vk, 'base64');
+  changed[100] ^= 1;
+  const copy = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'zkid-vk-')), 'vk.json');
+  fs.writeFileSync(copy, JSON.stringify({ ...pinned, vk: changed.toString('base64') }));
+  try {
+    assert.throws(() => loadPanVerificationKey(pathToFileURL(copy)), new RegExp(`expected ${PAN_VK_SHA256}`));
+  } finally {
+    fs.rmSync(path.dirname(copy), { recursive: true });
+  }
 });
 
 // ---- With proofs ----------------------------------------------------------------
@@ -143,21 +164,21 @@ test('a valid PAN proof is accepted: the document, the key, the hour DigiLocker 
   assert.ok(/^[0-9]+$/.test(result.nullifier));
 });
 
-test('a gender rule: the proof reveals the gender, and it must be one the rules accept', async () => {
+test('T1.16: a gender rule: the proof reveals the gender, and it must be one the rules accept', async () => {
   const result = await verifyAt(VERIFY_AT, proofs.p4, requests.r4);
   assert.ok(result.ok, JSON.stringify(result));
   assert.deepEqual(result.disclosed, { gender: 'F' });
   expectFailure(await verifyAt(VERIFY_AT, proofs.p5, requests.r5), 'GENDER_NOT_ALLOWED');
 });
 
-test('a PAN proof for a request that does not accept PAN records is refused, and does not use up the request', async () => {
+test('T2.8: a PAN proof for a request that does not accept PAN records is refused, and does not use up the request', async () => {
   const verifier = verifierAt(VERIFY_AT, [requests.r6]);
   expectFailure(await verifier.verify(proofs.p6.proof, proofs.p6.publicInputs, requests.r6, 'pan'), 'DOCUMENT_NOT_ACCEPTED');
   expectFailure(await verifier.verify(proofs.p6.proof, proofs.p6.publicInputs, requests.r6, 'pan'), 'DOCUMENT_NOT_ACCEPTED');
   expectFailure(await verifier.verify(proofs.p6.proof, proofs.p6.publicInputs, requests.r6, 'passport' as Document), 'BAD_PROOF');
 });
 
-test('binding: another request, another verifier, a used or expired request, another age cutoff', async () => {
+test('T2.7: binding: another request, another verifier, a used or expired request, another age cutoff', async () => {
   const verifier = verifierAt(VERIFY_AT, [requests.r1, requests.r3]);
   expectFailure(await verifier.verify(proofs.p1.proof, proofs.p1.publicInputs, requests.r3, 'pan'), 'CHALLENGE_MISMATCH');
   assert.equal((await verifier.verify(proofs.p1.proof, proofs.p1.publicInputs, requests.r1, 'pan')).ok, true);
@@ -168,7 +189,7 @@ test('binding: another request, another verifier, a used or expired request, ano
   expectFailure(await verifyAt(VERIFY_AT, proofs.p8, requests.r8), 'NULLIFIER_SEED_MISMATCH');
 });
 
-test('BAD_PROOF: a changed proof or public input, or a malformed one; none uses up the request', async () => {
+test('T7.7: BAD_PROOF: a changed proof or public input, or a malformed one; none uses up the request', async () => {
   const { proof, publicInputs } = proofs.p1;
   const verifier = verifierAt(VERIFY_AT, [requests.r1]);
   const bytes = Buffer.from(proof, 'base64');
@@ -189,7 +210,7 @@ test('BAD_PROOF: a changed proof or public input, or a malformed one; none uses 
   assert.equal((await verifier.verify(proof, publicInputs, requests.r1, 'pan')).ok, true, 'still accepted afterwards');
 });
 
-test('the issuer: a key the registry does not trust for PAN records, or a record verified outside its window', async () => {
+test('T1.12: the issuer: a key the registry does not trust for PAN records, or a record verified outside its window', async () => {
   const { publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
   expectFailure(await verifyAt(VERIFY_AT, proofs.p1, requests.r1, { registry: testRegistry([{ publicKey, document: 'pan' }]) }), 'UNTRUSTED_ISSUER');
   // The same RSA key, trusted only for Aadhaar QRs, does not vouch for a PAN record.
@@ -198,7 +219,7 @@ test('the issuer: a key the registry does not trust for PAN records, or a record
   expectFailure(await verifyAt(VERIFY_AT, proofs.p1, requests.r1, { registry: window }), 'ISSUER_KEY_NOT_VALID');
 });
 
-test('age, freshness and one account per person', async () => {
+test('T1.15, T3.6, T4.4: age, freshness and one account per person', async () => {
   expectFailure(await verifyAt(VERIFY_AT, proofs.p3, requests.r3), 'AGE_NOT_PROVEN');
   expectFailure(await verifyAt(VERIFY_AT, proofs.p9, requests.r9), 'CREDENTIAL_TOO_OLD');
   const store = new MemoryStore();

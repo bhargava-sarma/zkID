@@ -1,6 +1,6 @@
 // Holder app logic, in Node (no browser): request checks (THREAT_MODEL T5.4,
-// T6.2), QR and PAN record checks against the request's rules (T6.4), and what
-// each circuit's input reveals (T6.1). Run: npm test.
+// T6.2), QR and PAN record checks against the request's rules (T6.4) and date
+// (T6.5), and what each circuit's input reveals (T6.1). Run: npm test.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
@@ -155,6 +155,14 @@ test('T6.4: a PAN record the website would refuse is caught before proving', asy
   await assert.doesNotReject(checkPan(await record({ dob: '26-10-2007' }), panKeys, panRequest, NOW));
   await checkRejects(checkPan(await record(), panKeys, { ...panRequest, rules: { age19: true, gender: ['M', 'T'] } }, NOW), 'GENDER_NOT_ACCEPTED');
   await checkRejects(checkPan('<Certificate/>', panKeys, panRequest, NOW), 'NOT_A_RECORD');
+});
+
+test('T6.5: a PAN proof for a request dated more than a day back, or more than ten minutes ahead, is refused before proving', async () => {
+  const dated = (issuedAt) => ({ ...panRequest, issuedAt, expiresAt: NOW + 300 });
+  for (const issuedAt of [NOW - 86401, NOW - 20 * 365 * 86400, NOW + 601, NOW + 5 * 365 * 86400]) {
+    await checkRejects(checkPan(await record(), panKeys, dated(issuedAt), NOW), 'REQUEST_NOT_CURRENT');
+  }
+  for (const issuedAt of [NOW - 86400, NOW + 600]) await assert.doesNotReject(checkPan(await record(), panKeys, dated(issuedAt), NOW));
 });
 
 test("T6.1: a PAN proof's input reveals the gender only under a gender rule, and carries the request's age cutoff", async () => {

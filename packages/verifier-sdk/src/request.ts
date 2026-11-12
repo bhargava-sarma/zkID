@@ -68,12 +68,19 @@ export function checkRequest(request: unknown): ProofRequest {
     r.expiresAt >= r.issuedAt;
   if (!ok) throw new RequestError('INVALID_REQUEST', 'malformed proof request');
   checkVerifierId(r.verifierId);
-  const documents = checkDocuments(r.documents);
-  const rules = checkRules(r.rules);
-  if (documents.includes('pan') && (rules.pinCode || rules.state)) {
+  checkAccepted(r.documents, r.rules);
+  return r;
+}
+
+// What a request accepts: the documents, and rules that each of them can meet.
+// A PAN record has no address, so a rule on PIN code or state needs a request
+// that accepts only Aadhaar QRs.
+export function checkAccepted(documents: unknown, rules: unknown): { documents: Document[]; rules: Rules } {
+  const accepted = { documents: checkDocuments(documents), rules: checkRules(rules) };
+  if (accepted.documents.includes('pan') && (accepted.rules.pinCode || accepted.rules.state)) {
     throw new RequestError('INVALID_REQUEST', 'rules on PIN code or state need an Aadhaar QR: a PAN record has no address');
   }
-  return r;
+  return accepted;
 }
 
 // SHA-256 of a domain-separated string, cut to 31 bytes so it is always below

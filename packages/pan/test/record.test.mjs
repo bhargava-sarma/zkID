@@ -20,7 +20,7 @@ test('a synthetic record reads: its signer and values', async () => {
   assert.equal(istHourToUnix(2026110513), Date.parse('2026-11-05T13:00:00+05:30') / 1000);
 });
 
-test('refused before the circuit: a changed record, another key, another signature scheme, and what is not a record', async () => {
+test('T1.13, T7.8: refused before the circuit: a changed record, another key, another signature scheme, and what is not a record', async () => {
   const good = await makeRecord(issuer);
   await refuses(good.replace('SYNTHETIC TEST PERSON', 'SYNTHETIC TEST PERSOM'), 'DIGEST_MISMATCH');
   await refuses(good.replace(/<SignatureValue>./, '<SignatureValue>A'), 'UNTRUSTED_RECORD');
@@ -34,7 +34,7 @@ test('refused before the circuit: a changed record, another key, another signatu
   await refuses(good.replace('<Certificate ', '<Certificat ').replace('</Certificate>', '</Certificat>'), 'NOT_A_RECORD');
 });
 
-test('refused before the circuit: validly signed records outside the layout it reads', async () => {
+test('T1.14: refused before the circuit: validly signed records outside the layout it reads', async () => {
   const cases = {
     'another document type': { edit: (x) => x.replace('type="PANCR"', 'type="DRVLC"') },
     'a status other than A': { status: 'I' },

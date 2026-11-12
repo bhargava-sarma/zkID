@@ -41,7 +41,7 @@ test('values that need escaping, comments, CDATA, whitespace and non-ASCII text 
   for (const xml of cases) assert.equal(ours(xml), theirs(xml), xml);
 });
 
-test('namespaced elements and attributes are refused, not canonicalized', () => {
+test('T7.8: namespaced elements and attributes are refused, not canonicalized', () => {
   for (const xml of ['<Certificate xmlns="urn:x"><A/></Certificate>', '<Certificate><p:A xmlns:p="urn:p"/></Certificate>', '<Certificate xmlns:p="urn:p" p:a="1"/>']) {
     assert.throws(() => ours(xml), C14nError, xml);
   }

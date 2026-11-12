@@ -1,7 +1,7 @@
 {
   "name": "@zkid/demo-rp",
   "private": true,
-  "description": "Demo relying party: an age-gated page that uses the zkID verifier SDK end to end, locally (state in memory) or hosted on Vercel (state in Upstash Redis).",
+  "description": "Demo relying party: an age-gated page that uses the zkID verifier SDK end to end, for Aadhaar QRs and DigiLocker PAN records, locally (state in memory) or hosted on Vercel (state in Upstash Redis).",
   "type": "module",
   "scripts": {
     "setup": "node setup-demo.mjs",
@@ -19,6 +19,9 @@
     "typescript": "5.9.3"
   },
   "dependencies": {
+    "@aztec/bb.js": "5.3.0",
+    "@xmldom/xmldom": "0.9.12",
+    "@zkpassport/poseidon2": "0.6.2",
     "poseidon-lite": "0.3.0",
     "qrcode": "1.5.4",
     "snarkjs": "0.7.6"

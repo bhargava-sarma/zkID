@@ -28,7 +28,7 @@ jobs:
 
       - name: Install
         run: |
-          for dir in packages/secure-qr packages/circuit packages/issuer-registry packages/verifier-sdk \
+          for dir in packages/secure-qr packages/circuit packages/pan packages/issuer-registry packages/verifier-sdk \
                      frontend apps/demo-rp attack-suite; do
             (cd "$dir" && npm ci --no-audit --no-fund)
           done
@@ -52,6 +52,11 @@ jobs:
 
       - name: Production registry has no test or compromised key
         run: cd packages/issuer-registry && npm run check
+
+      # Recompiles the PAN circuit and remakes its verification key, and fails
+      # if either differs from the committed, pinned artifacts.
+      - name: PAN circuit artifacts match the source
+        run: cd packages/pan && npm run check
 
       - name: Holder app production build
         run: cd frontend && npm run build

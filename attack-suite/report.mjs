@@ -8,7 +8,8 @@
 // change the report, change THREAT_MODEL.md or the tests and rerun.
 //
 // Needs every suite installed, the circuit artifacts (packages/circuit:
-// npm run fetch) and Playwright's Chromium for the end-to-end test.
+// npm run fetch) and Playwright's Chromium for the end-to-end test. PAN_XML
+// (real records) is left out of the run, so the report is the same anywhere.
 // Usage: node attack-suite/report.mjs   (from anywhere)
 
 import { spawnSync } from 'node:child_process';
@@ -26,6 +27,7 @@ const REPORTER = path.join(ROOT, 'attack-suite', 'reporter.mjs');
 const SUITES = [
   { dir: 'packages/secure-qr', tests: ['test/*.test.mjs'] },
   { dir: 'packages/circuit', tests: ['test/*.test.mjs'] },
+  { dir: 'packages/pan', tests: ['test/*.test.mjs'] },
   { dir: 'packages/issuer-registry', tests: ['test/*.test.ts'] },
   { dir: 'packages/verifier-sdk', tests: ['test/*.test.ts'] },
   { dir: 'frontend', tests: ['src/holder/*.test.js'] },
@@ -89,7 +91,7 @@ function runSuites() {
       const run = spawnSync(
         process.execPath,
         ['--test', ...(suite.flags ?? []), '--test-reporter=spec', '--test-reporter-destination=stdout', `--test-reporter=${REPORTER}`, `--test-reporter-destination=${jsonl}`, ...suite.tests],
-        { cwd: path.join(ROOT, suite.dir), stdio: 'inherit' },
+        { cwd: path.join(ROOT, suite.dir), stdio: 'inherit', env: { ...process.env, PAN_XML: '' } },
       );
       if (run.status !== 0) problems.push(`${suite.dir}: the suite exited with ${run.status ?? run.signal}`);
       const lines = fs.existsSync(jsonl) ? fs.readFileSync(jsonl, 'utf8').split('\n').filter(Boolean) : [];
@@ -126,8 +128,8 @@ function render({ adversaries, attacks, tests }, passed) {
       `This file is written only when no test in the ${SUITES.length} suites below fails and every test the threat model cites passes, so each ✓ is a test that passed in that run. ` +
       `For a **No** or Partly row, the tests show the attack succeeding, and where the verdict is qualified, also where it stops.`,
     '',
-    `Suites: ${SUITES.map((s) => `\`${s.dir}\``).join(', ')}. Every QR in the tests below is synthetic and signed with an ephemeral test key. ` +
-      `Where a test makes a proof, it is a real Groth16 proof under Anon Aadhaar's published proving key.`,
+    `Suites: ${SUITES.map((s) => `\`${s.dir}\``).join(', ')}. Every QR and PAN record in the tests below is synthetic and signed with an ephemeral test key. ` +
+      `Where a test makes a proof, it is a real one: Groth16 under Anon Aadhaar's published proving key for a QR, UltraHonk with zkID's pinned circuit for a PAN record.`,
     '',
     '## Summary',
     '',

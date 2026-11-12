@@ -5,8 +5,9 @@
 // - Every other domain the project answers on is a demo shop (app.ts), whose
 //   verifier id is its origin.
 // State is in Upstash Redis (KV_REST_API_URL and KV_REST_API_TOKEN, as Vercel's
-// integration names them). The demo's TEST issuer key is made by vercel/build.mjs
-// on every deployment; only these shops and the holder's demo build trust it.
+// integration names them). The demo's TEST issuer keys, one for Aadhaar QRs and
+// one for PAN records, are made by vercel/build.mjs on every deployment; only
+// these shops and the holder's demo build trust them.
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -39,10 +40,11 @@ const missing = [
   !kvToken && 'KV_REST_API_TOKEN',
 ].filter(Boolean);
 
-// Written by vercel/build.mjs next to this file: the TEST issuer's public key and private key.
+// Written by vercel/build.mjs next to this file: the TEST issuer's public keys and private keys.
 const issuer = JSON.parse(fs.readFileSync(new URL('./demo-issuer.json', import.meta.url), 'utf8')) as {
-  keys: { id: string; label: string; modulus: string; keyHash: string }[];
+  keys: { id: string; label: string; document: 'aadhaar' | 'pan'; modulus: string; keyHash: string }[];
   privateKeyPem: string;
+  panPrivateKeyPem: string;
 };
 
 const HOST = /^[a-z0-9.-]+(:[0-9]{1,5})?$/i;
@@ -60,7 +62,11 @@ const app = missing.length
       holder: holder!.href,
       registry: demoRegistry(issuer.keys),
       kv: new UpstashKV(kvUrl!, kvToken!),
-      testIssuer: { label: `zkID's demo TEST issuer (not UIDAI)`, privateKey: crypto.createPrivateKey(issuer.privateKeyPem) },
+      testIssuer: {
+        label: `zkID's demo TEST issuers (not UIDAI, not DigiLocker)`,
+        privateKey: crypto.createPrivateKey(issuer.privateKeyPem),
+        panPrivateKey: crypto.createPrivateKey(issuer.panPrivateKeyPem),
+      },
     });
 
 export default async function handler(req: http.IncomingMessage, res: http.ServerResponse) {

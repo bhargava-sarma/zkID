@@ -14,7 +14,7 @@ import { closeVerifier as closePanVerifier, ready as panVerifierReady, verifyPro
 import { DOCUMENTS, RequestError, checkDocuments, checkRequest, checkVerifierId, nullifierSeedFor, signalHashFor, type Document, type ProofRequest } from './request.ts';
 import { canonicalRules, checkRules, decodeOutputs, disclosedFor, panDobCutoff, ruleFailure, type Disclosed, type Rules } from './rules.ts';
 
-export { DOCUMENTS, RequestError, checkDocuments, checkRequest, checkVerifierId, nullifierSeedFor, signalHashFor, type Document, type ProofRequest } from './request.ts';
+export { DOCUMENTS, RequestError, checkAccepted, checkDocuments, checkRequest, checkVerifierId, nullifierSeedFor, signalHashFor, type Document, type ProofRequest } from './request.ts';
 export { GENDERS, checkRules, decodeOutputs, panDobCutoff, revealFor, ruleFailure, type Disclosed, type Gender, type Rules } from './rules.ts';
 
 export const FAILURE_CODES = [
@@ -90,10 +90,10 @@ function loadVerificationKey(): unknown {
 }
 
 // The PAN circuit's UltraHonk verification key, pinned (packages/pan/build.mjs
-// makes it from the circuit; CI checks it still does).
-const PAN_VK_SHA256 = '264ce5ceb9e566b56a08c8d18bb0536eb3d11832430b22d8550450c5aa26d27c';
-function loadPanVerificationKey(): Uint8Array {
-  const { vk } = JSON.parse(fs.readFileSync(new URL('../../pan/artifacts/vk.json', import.meta.url), 'utf8')) as { vk: string };
+// makes it from the circuit; CI checks it still does). `file` is for the tests.
+export const PAN_VK_SHA256 = '264ce5ceb9e566b56a08c8d18bb0536eb3d11832430b22d8550450c5aa26d27c';
+export function loadPanVerificationKey(file: URL = new URL('../../pan/artifacts/vk.json', import.meta.url)): Uint8Array {
+  const { vk } = JSON.parse(fs.readFileSync(file, 'utf8')) as { vk: string };
   const bytes = Buffer.from(vk, 'base64');
   const digest = crypto.createHash('sha256').update(bytes).digest('hex');
   if (digest !== PAN_VK_SHA256) throw new Error(`packages/pan/artifacts/vk.json holds a key with SHA-256 ${digest}, expected ${PAN_VK_SHA256}.`);
@@ -135,7 +135,6 @@ export interface VerifierOptions {
   now?: () => number; // Unix seconds
   requestTtlSeconds?: number; // default 300
   onSeenNullifier?: 'reject' | 'accept'; // 'reject' for sign-up (default), 'accept' for returning users
-  crsPath?: string; // where PAN verification keeps Barretenberg's setup points (packages/pan/verify.mjs); default ~/.bb-crs
 }
 
 export function createVerifier(options: VerifierOptions) {
@@ -277,10 +276,10 @@ export function createVerifier(options: VerifierOptions) {
     if (v.dobCutoff !== String(panDobCutoff(request.issuedAt))) return fail('CHALLENGE_MISMATCH', "the proof uses another date-of-birth cutoff than the request's");
 
     // 3. The proof itself. Barretenberg's own failures are the verifier's, not the proof's.
-    await panVerifierReady({ crsPath: options.crsPath });
+    await panVerifierReady();
     let valid = false;
     try {
-      valid = await verifyPanProof({ proof: Buffer.from(proof as string, 'base64'), publicInputs: inputs }, panVk, { crsPath: options.crsPath });
+      valid = await verifyPanProof({ proof: Buffer.from(proof as string, 'base64'), publicInputs: inputs }, panVk);
     } catch {
       valid = false; // a proof Barretenberg cannot read; reported as BAD_PROOF below
     }
