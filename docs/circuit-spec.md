@@ -10,6 +10,9 @@ and what it does not, and what it costs.
 Code: [`packages/circuit`](../packages/circuit/README.md). The test IDs below
 are those of [THREAT_MODEL.md](THREAT_MODEL.md).
 
+Since 2026-11-12 zkID also proves statements about a DigiLocker PAN
+Verification Record, with a circuit of its own: section 7.
+
 ## 1. Provenance and trusted setup
 
 | | |
@@ -165,3 +168,141 @@ keys:
 | T5.1 same QR, two seeds | different nullifiers |
 | T7.1 each of the nine public signals changed after proving | verification fails; a verification key that is not the pinned one is refused |
 | T7.6 delimiter hints 3, 10–13 and 17 shifted by ±1 / the other twelve shifted | witness fails / outputs unchanged |
+
+## 7. The PAN circuit
+
+zkID's own circuit for DigiLocker PAN Verification Records, in Noir 1.0.0,
+proved with Barretenberg's UltraHonk (`@aztec/bb.js` 5.3.0, zero-knowledge, with
+Poseidon2 for its transcript). Code: [`packages/pan`](../packages/pan/README.md)
+(`circuit/src/main.nr`, with `sha1.nr`, `bignum.nr`, `poseidon2.nr` and the
+generated `constants.nr`). It was written for this project and has not been
+reviewed by anyone else (THREAT_MODEL, S13).
+
+### 7.1 The record
+
+DigiLocker issues the record after it checks a PAN with the Income Tax
+Department. The XML is signed by DigiLocker (XML signature, enveloped): SHA-256
+of the record's exclusive canonical form is the `DigestValue` in `SignedInfo`,
+and `SignedInfo` is signed with RSA-2048, PKCS#1 v1.5 with SHA-1, under
+DigiLocker's document-signing key. The record holds the PAN number, name, date
+of birth, gender, a 32-hex `uid` (DigiLocker's id for the account) and
+`verifiedOn`, when DigiLocker checked the PAN; its address fields are empty.
+One record is about 3.2 KB of signed bytes, most of them a QR image.
+
+The holder app reads the record (`packages/pan/record.mjs`, the same code in
+Node): it canonicalizes it with zkID's exclusive-c14n (`c14n.mjs`, which matches
+`xml-crypto` on synthetic records and on the owner's), checks the digest and
+DigiLocker's signature against the keys it trusts, and checks the layout the
+circuit reads, refusing anything else before proving.
+
+### 7.2 Provenance and setup
+
+| | |
+|---|---|
+| Compiled program | `artifacts/pan_verifier.json`, SHA-256 `e5a27464762d52f2d558865339b2d41c130a63f032d0f1137378c4725b94933f`, made by `build.mjs` with `@noir-lang/noir_wasm` 1.0.0 |
+| Verification key | `artifacts/vk.json`, key SHA-256 `264ce5ceb9e566b56a08c8d18bb0536eb3d11832430b22d8550450c5aa26d27c`, pinned in the SDK, which checks it as it loads it (T1.17) |
+| Reproducible | `npm run check` rebuilds both from `circuit/` and compares them byte for byte; CI runs it |
+| Setup | none for this circuit: UltraHonk uses the BN254 points of Aztec's Ignition ceremony (THREAT_MODEL, S12). The prover downloads them from Aztec's CDN; the verifier embeds the two it needs, the generator and [x]₂, and Barretenberg checks [x]₂ against the SHA-256 it pins (`01797bfc…`) |
+
+A new Noir or bb.js version changes the verification key, so the versions are
+pinned exactly.
+
+### 7.3 Interface
+
+| | Name | Content |
+|---|---|---|
+| private | `doc` | the canonical record, SHA-256 padded, then zeros to 3,584 bytes (56 blocks) |
+| private | `doc_padded_length` | its padded length |
+| private | `signature`, `modulus` | 18 limbs of 120 bits each |
+| private | `rsa_q`, `rsa_r` | quotient and remainder of each of the 17 multiplications of `signature^65537 mod n` |
+| private | `gender_at`, `uid_at`, `pan_at` | where the gender, the Person's `uid` and `<PAN num=` start |
+| private | `reveal_gender` | set by the holder app only when the request has a gender rule |
+| public input | `dob_cutoff` | `YYYYMMDD`; the SDK requires the request's day in India, 19 years earlier |
+| public input | `nullifier_seed`, `signal_hash` | as for a QR (THREAT_MODEL, section 1.1) |
+| output | `pubkey_hash` | Poseidon2 of the modulus's 18 limbs |
+| output | `nullifier` | Poseidon2 of the seed, the PAN number and the two halves of `uid` |
+| output | `verified_hour` | `verifiedOn` to the hour, as `YYYYMMDDHH` (IST) |
+| output | `born_by` | whether the date of birth is on or before `dob_cutoff` |
+| output | `gender` | the character code of M, F or T if revealed, else 0 |
+
+UltraHonk lists them as eight public inputs in the order `dobCutoff`,
+`nullifierSeed`, `signalHash`, `pubkeyHash`, `nullifier`, `verifiedHour`,
+`bornBy`, `gender` (`packages/pan/public.mjs`).
+
+### 7.4 What it enforces
+
+1. **The signature.** SHA-256 over the padded record, block by block up to
+   `doc_padded_length`; its base64 inside DigiLocker's exact `SignedInfo`, of
+   which every other byte is fixed (whitespace included); SHA-1 of that
+   `SignedInfo`, from the state after its constant first seven blocks; and
+   `signature^65537 = EM mod n`, where EM is the PKCS#1 v1.5 encoding of that
+   SHA-1. Each multiplication is checked as `a × b = q × n + r` over the
+   integers, limb by limb with exact carries, every limb range-checked.
+2. **A PAN record.** The record's head is fixed byte for byte except the PAN
+   number: `type="PANCR"`, `status="A"`, issued through DigiLocker by the
+   Income Tax Department, then the date of birth as `DD-MM-YYYY` with digits.
+3. **The fields.** The gender, `uid` and `<PAN>` attributes, in that order after
+   the date of birth, each matched by its exact markup where the prover says
+   it is; the gender is `MALE`, `FEMALE` or `TRANSGENDER`; `uid` is the Person's
+   last attribute; the `<PAN>` element's number equals the head's; `verifiedOn`
+   is `DD-MM-YYYY HH:MM:SS` with digits. All of them end within the first 1,280
+   bytes and inside the hashed bytes. (Writing this circuit showed that the
+   first version, in circom, did not check the last part: fields of a short
+   record could be written after its end, where the signature does not reach.
+   Both now check it, T1.14.)
+4. **The outputs** as in 7.3; the gender only with `reveal_gender`.
+
+### 7.5 What it does not enforce
+
+- **Calendar ranges.** Day and month digits are not range-checked: month 13
+  would pass if DigiLocker signed it (as T1.9 for a QR). This relies on
+  DigiLocker's formatting (S10).
+- **Which key.** It accepts any RSA key and outputs its hash; the SDK requires a
+  registry key for PAN records (T1.12).
+- **Freshness, age and rules** are the SDK's: it compares `verified_hour` with
+  `maxAge`, requires `born_by` when the rules ask for age, and checks a revealed
+  gender against the rules.
+- **Other layouts.** The head, the 3,584-byte limit and the 1,280-byte window
+  fit the records seen, all one person's; a long name, a larger QR image or an
+  e-mail before the gender still fit. Other changes fail closed: the person
+  cannot prove at all.
+
+### 7.6 Cost
+
+333,411 gates. Measured on 2026-11-11 (spike/pan-noir), Node with bb.js's
+WebAssembly backend and headless Chromium 141 on a 4-core Intel Xeon container
+(2.3 GHz, 16 GB), and on the owner's phone (8 cores, 8 GB or more, Android 16,
+Chrome 156):
+
+| | Proof | Peak memory |
+|---|---|---|
+| Node, 1 thread | 44 s | 1.1 GB |
+| Node, 4 threads | 16 s | 1.2 GB |
+| Chromium, 1 thread | 40 s | 0.9 GB |
+| Chromium, 4 threads | 20 s | 1.0 GB |
+| The owner's phone, 1 thread | 34.5 s | |
+| The owner's phone, 8 threads | **13.6 s** | |
+
+The witness takes under a second. The first proof downloads about 25 MB: the
+page, the 0.7 MB program, and 20 MB of setup points (13.9 s on the phone; 1.3 s
+the next time). A proof is 14,656 bytes, against 0.8 KB for a QR's. Checking one
+takes milliseconds once Barretenberg has started. The holder app proves on up
+to 8 threads when the page is cross-origin isolated, on one otherwise.
+
+### 7.7 Negative controls
+
+`cd packages/pan && npm test`, on synthetic records signed with ephemeral keys
+(`PAN_XML=<files>` also runs the owner's real records, locally; nothing of them
+is printed or committed):
+
+| Test | Result |
+|---|---|
+| T1.13 a changed record byte, signature or key; a wrong field position | the reader refuses it before proving; the circuit fails |
+| T1.14 another document type, status or issuer, two PAN numbers, an unknown gender or `uid`; fields after a short record's hashed bytes | the reader refuses them; the circuit fails |
+| T1.15 born the day after, on and before the cutoff | `born_by` is 1 only on or before it |
+| T1.17 the pinned verification key against the pinned program | both match their SHA-256 |
+| T4.4, T5.5 the same PAN and `uid`; another verifier; another person | the same nullifier; another; another |
+| T5.6, T6.1 every output, against what `input.mjs` computes outside the circuit | equal; the gender is 0 unless revealed |
+| T7.7 a proof with any byte or public input changed | Barretenberg rejects it |
+| T7.8 not XML, a DOCTYPE, namespaces, not a record | typed reader error |
+| the owner's two records, verified nine days apart (`PAN_XML`, local) | accepted, with the outputs computed outside the circuit; both carry the same PAN and `uid`, so the same nullifier |
