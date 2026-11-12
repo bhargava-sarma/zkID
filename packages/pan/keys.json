@@ -1,0 +1,19 @@
+{
+  "note": "DigiLocker document-signing keys that zkID verifiers trust for PAN Verification Records. Public keys, not secrets: each is the key of the X.509 certificate DigiLocker embeds in every record it signs. The certificates are not committed, because their subject includes an individual's e-mail address; their SHA-256 is. packages/issuer-registry/build.mjs makes registry entries from this file.",
+  "keys": [
+    {
+      "id": "digilocker-ds-2026-2029",
+      "subject_cn": "DS DIGITAL INDIA CORPORATION",
+      "issuer_cn": "ProDigiSign Sub CA DSC 2022",
+      "serial": "439ECD9BFFCE9F2B421A9527F625D651",
+      "not_before": "2026-02-13T03:50:15.000Z",
+      "not_after": "2029-02-11T04:41:28.000Z",
+      "key": "rsa-2048 e=65537",
+      "modulus": "c89cc204a8928644826a276e22c440dbbadcd7f88ec5d3f402c2f50ac60a579479d122d4cd540d2c02fd725a612ec5c48f30c26fe03019c86a416ad0012208e9a24947d7314e3e5d6fd9de9a79a3be4ee272d70f00a48f44d1dc9f04fd10c4f1401fb764c6502bf0837da13d733eb2f0c55b2b2766603b1cb1f327443d2825d7447f26871c3ebdf55f141a6fa6290b0c4914129c8a2fc2eae2d402e448c05759682a97bcb13f1a3b34cb7ca0c740e52b55961bbef7cb4f1dfa8cb1b6216b791ca88fce89b48bb425dbe80dff4b4bea43990c2ff4512ec70dcac4b92fc7816089a9cbe6aa354ae159c40dfb13e0ece06d15009f9adea8bcf5ac17a717a4c34273",
+      "cert_sha256": "66bd3cc8a352af6210bdfb3f9a7d94b963d3e467327095b26312a8eac7ecce9a",
+      "spki_sha256": "dbe1ef8a14a8523090a132e10f09a63d781c1dc4c8ae331e43a5b5ad02356b3b",
+      "source": "The certificate embedded in the owner's DigiLocker records: a PAN Verification Record downloaded on 2026-10-27, the same record downloaded again on 2026-11-05 and fetched again from the Income Tax Department that day, and a driving licence record. All four carry this one certificate.",
+      "evidence": "Every one of those records verifies under this key. The certificate's chain to ProDigiSign Sub CA DSC 2022 and India's CCA root was not checked."
+    }
+  ]
+}

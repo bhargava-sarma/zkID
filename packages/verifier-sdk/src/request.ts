@@ -7,13 +7,20 @@ import { canonicalRules, checkRules, type Rules } from './rules.ts';
 
 export { RequestError } from './errors.ts';
 
+// The credentials a request may accept, in this order: an Aadhaar Secure QR,
+// and a DigiLocker PAN Verification Record (THREAT_MODEL decision 6).
+export const DOCUMENTS = ['aadhaar', 'pan'] as const;
+export type Document = (typeof DOCUMENTS)[number];
+
 export interface ProofRequest {
-  version: 2;
+  version: 3;
   verifierId: string; // the verifier's origin, e.g. https://shop.example (THREAT_MODEL decision 1)
   challenge: string; // 32 random bytes, hex
-  maxAgeSeconds: number; // oldest QR accepted, by its generation time
+  issuedAt: number; // Unix seconds; a PAN proof shows the age on this day (rules.ts)
+  maxAgeSeconds: number; // oldest credential accepted: a QR by its generation time, a PAN record by its verification time
   expiresAt: number; // Unix seconds; the request is void after this
-  rules: Rules; // what the QR must show (rules.ts)
+  documents: Document[]; // the credentials accepted, in DOCUMENTS order
+  rules: Rules; // what the credential must show (rules.ts)
 }
 
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
@@ -33,21 +40,39 @@ export function checkVerifierId(id: string): string {
   return id;
 }
 
+// The documents a request lists: at least one, each known, once, in DOCUMENTS order.
+export function checkDocuments(documents: unknown): Document[] {
+  const list = documents as Document[];
+  if (!Array.isArray(list) || list.length === 0 || !list.every((d) => DOCUMENTS.includes(d))) {
+    throw new RequestError('INVALID_REQUEST', `documents must list one or more of ${DOCUMENTS.join(', ')}`);
+  }
+  if (list.some((d, i) => i > 0 && DOCUMENTS.indexOf(d) <= DOCUMENTS.indexOf(list[i - 1]))) {
+    throw new RequestError('INVALID_REQUEST', `documents must list each at most once, in the order ${DOCUMENTS.join(', ')}`);
+  }
+  return list;
+}
+
 export function checkRequest(request: unknown): ProofRequest {
   const r = request as ProofRequest;
   const ok =
     typeof r === 'object' &&
     r !== null &&
-    r.version === 2 &&
+    r.version === 3 &&
     typeof r.challenge === 'string' &&
     /^[0-9a-f]{64}$/.test(r.challenge) &&
+    Number.isSafeInteger(r.issuedAt) &&
+    r.issuedAt > 0 &&
     Number.isSafeInteger(r.maxAgeSeconds) &&
     r.maxAgeSeconds > 0 &&
     Number.isSafeInteger(r.expiresAt) &&
-    r.expiresAt > 0;
+    r.expiresAt >= r.issuedAt;
   if (!ok) throw new RequestError('INVALID_REQUEST', 'malformed proof request');
   checkVerifierId(r.verifierId);
-  checkRules(r.rules);
+  const documents = checkDocuments(r.documents);
+  const rules = checkRules(r.rules);
+  if (documents.includes('pan') && (rules.pinCode || rules.state)) {
+    throw new RequestError('INVALID_REQUEST', 'rules on PIN code or state need an Aadhaar QR: a PAN record has no address');
+  }
   return r;
 }
 
@@ -67,5 +92,8 @@ export const nullifierSeedFor = (verifierId: string): Promise<string> =>
 // Binds a proof to one request: any change to any field, rules included, changes it.
 export function signalHashFor(request: ProofRequest): Promise<string> {
   const r = checkRequest(request);
-  return fieldHash('zkid/v2/request', [r.version, r.verifierId, r.challenge, r.maxAgeSeconds, r.expiresAt, canonicalRules(r.rules)].join('\n'));
+  return fieldHash(
+    'zkid/v3/request',
+    [r.version, r.verifierId, r.challenge, r.issuedAt, r.maxAgeSeconds, r.expiresAt, r.documents.join(','), canonicalRules(r.rules)].join('\n'),
+  );
 }

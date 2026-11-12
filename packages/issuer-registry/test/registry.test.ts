@@ -19,7 +19,7 @@ const freshTestKey = () => {
   return { publicKey, keyHash: keyHash(publicKey) as string };
 };
 
-test('registry.json is what build.mjs makes from the UIDAI certificates', () => {
+test("registry.json is what build.mjs makes from the UIDAI certificates and DigiLocker's keys", () => {
   const file = JSON.parse(fs.readFileSync(new URL('../registry.json', import.meta.url), 'utf8'));
   assert.deepEqual(file.keys, entries());
 });
@@ -30,20 +30,36 @@ test("the 2021 key's hash equals the one Anon Aadhaar's SDK pins (an independent
   assert.equal(ds05?.keyHash, '18063425702624337643644061197836918910810808173893535653269228433734128853484');
 });
 
-test('production registry: the four UIDAI keys; DS 06 covers October 2026', () => {
+test("production registry: the four UIDAI keys and DigiLocker's; DS 06 and DigiLocker's key cover November 2026", () => {
   const registry = productionRegistry();
-  assert.equal(registry.keys.length, 4);
-  assert.ok(registry.keys.every((k) => k.issuer === 'UIDAI' && !k.test));
-  const ds06 = registry.keys.find((k) => k.id === 'uidai-ds-06_2026-2029');
-  assert.ok(ds06);
-  const october2026 = Date.parse('2026-10-26T00:00:00Z') / 1000;
-  assert.ok(ds06.notBefore <= october2026 && october2026 <= ds06.notAfter);
-  assert.equal(findKey(registry, ds06.keyHash), ds06);
+  assert.equal(registry.keys.length, 5);
+  assert.ok(registry.keys.every((k) => !k.test));
+  assert.deepEqual(registry.keys.map((k) => `${k.issuer}/${k.document}`), ['UIDAI/aadhaar', 'UIDAI/aadhaar', 'UIDAI/aadhaar', 'UIDAI/aadhaar', 'DigiLocker/pan']);
+  const november2026 = Date.parse('2026-11-11T00:00:00Z') / 1000;
+  for (const id of ['uidai-ds-06_2026-2029', 'digilocker-ds-2026-2029']) {
+    const key = registry.keys.find((k) => k.id === id);
+    assert.ok(key && key.notBefore <= november2026 && november2026 <= key.notAfter, id);
+    assert.equal(findKey(registry, key.keyHash, key.document), key);
+  }
   assert.equal(findKey(registry, '1'), undefined);
 });
 
+test("a key is found only for its own document: a PAN key's hash names no Aadhaar key, and the other way round", () => {
+  const registry = productionRegistry();
+  const pan = registry.keys.find((k) => k.document === 'pan')!;
+  const aadhaar = registry.keys.find((k) => k.document === 'aadhaar')!;
+  assert.equal(findKey(registry, pan.keyHash, 'aadhaar'), undefined);
+  assert.equal(findKey(registry, pan.keyHash), undefined, 'the default document is aadhaar');
+  assert.equal(findKey(registry, aadhaar.keyHash, 'pan'), undefined);
+  // The same RSA key, trusted for both documents, is two entries with two hashes.
+  const { publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const both = testRegistry([{ publicKey, id: 'q' }, { publicKey, id: 'p', document: 'pan' }]);
+  assert.notEqual(both.keys[0].keyHash, both.keys[1].keyHash);
+  assert.equal(findKey(both, both.keys[1].keyHash, 'pan')?.id, 'p');
+});
+
 test('T1.5: a test key in a production registry is refused, and the check CLI fails the build', () => {
-  const testKeys = testRegistry([freshTestKey()]).keys;
+  const testKeys = testRegistry([freshTestKey(), { ...freshTestKey(), keyHash: undefined, document: 'pan' }]).keys;
   const mixed = [...productionRegistry().keys, ...testKeys];
   throwsCode(() => checkRegistry({ production: true, keys: mixed }), 'TEST_KEY_IN_PRODUCTION');
 
@@ -84,4 +100,6 @@ test('malformed and duplicate entries are refused', () => {
   throwsCode(() => checkRegistry({ production: false, keys: [{ ...entry, keyHash: '0x12' }] }), 'BAD_ENTRY');
   throwsCode(() => checkRegistry({ production: false, keys: [{ ...entry, keyHash: (BigInt(entry.keyHash) + 1n).toString() }] }), 'BAD_ENTRY');
   throwsCode(() => checkRegistry({ production: false, keys: [entry, { ...entry, id: 'again' }] }), 'DUPLICATE_KEY');
+  throwsCode(() => checkRegistry({ production: false, keys: [{ ...entry, document: 'passport' as 'pan' }] }), 'BAD_ENTRY');
+  throwsCode(() => checkRegistry({ production: false, keys: [{ ...entry, document: 'pan' }] }), 'BAD_ENTRY'); // an Aadhaar key hash, called a PAN one
 });

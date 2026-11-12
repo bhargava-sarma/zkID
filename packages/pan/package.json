@@ -1,0 +1,24 @@
+{
+  "name": "@zkid/pan",
+  "private": true,
+  "type": "module",
+  "description": "DigiLocker PAN Verification Records for zkID: the Noir circuit and its pinned build, a record reader that runs in browsers and Node, the circuit input, the prover, and synthetic TEST records.",
+  "scripts": {
+    "test": "node --test \"test/*.test.mjs\"",
+    "build": "node build.mjs",
+    "check": "node gen-constants.mjs --check && node build.mjs --check"
+  },
+  "dependencies": {
+    "@aztec/bb.js": "5.3.0",
+    "@noir-lang/acvm_js": "1.0.0",
+    "@noir-lang/noir_js": "1.0.0",
+    "@noir-lang/noirc_abi": "1.0.0",
+    "@xmldom/xmldom": "0.9.8",
+    "@zkpassport/poseidon2": "0.6.2",
+    "qrcode": "1.5.4"
+  },
+  "devDependencies": {
+    "@noir-lang/noir_wasm": "1.0.0",
+    "xml-crypto": "6.1.2"
+  }
+}
