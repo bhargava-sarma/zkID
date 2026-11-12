@@ -68,8 +68,14 @@ writeJson(publicFile, { note, keys });
 writeJson(path.join(build, 'apps/demo-rp/vercel/demo-issuer.json'), { note, keys, privateKeyPem: qrKey.pem, panPrivateKeyPem: panKey.pem });
 
 step('building the holder app (demo build, under /holder/)');
-if (!fs.existsSync(path.join(frontend, 'node_modules', 'vite'))) {
+// Its packages as its lockfile pins them. A node_modules that is merely there
+// may be older than the lockfile (Vercel restores one from its build cache),
+// so the last install leaves the lockfile's hash, and a different one reinstalls.
+const lockHash = crypto.createHash('sha256').update(fs.readFileSync(path.join(frontend, 'package-lock.json'))).digest('hex');
+const installed = path.join(frontend, 'node_modules', '.zkid-lockfile-sha256');
+if (!fs.existsSync(installed) || fs.readFileSync(installed, 'utf8') !== lockHash) {
   execFileSync('npm', ['ci', '--no-audit', '--no-fund'], { cwd: frontend, stdio: 'inherit' });
+  fs.writeFileSync(installed, lockHash);
 }
 const holderOut = path.join(output, 'static', 'holder');
 execFileSync(path.join(frontend, 'node_modules', '.bin', 'vite'), ['build', '--mode', 'demo', '--base', '/holder/', '--outDir', holderOut, '--emptyOutDir'], {

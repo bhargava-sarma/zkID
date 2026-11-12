@@ -102,7 +102,9 @@ One Vercel project, built by `vercel/build.mjs`, serves:
 The build compiles the shops (`app.ts`, `vercel/handler.ts`) and the packages
 they import to JavaScript, makes two new TEST issuer keys (one for QRs, one for
 PAN records), builds the holder app with them under `/holder/`, and writes
-Vercel's Build Output API to `.vercel/output`. The keys' private halves go only
+Vercel's Build Output API to `.vercel/output`. It installs the holder app's
+packages from its lockfile, and again whenever the lockfile changes: Vercel can
+restore an older `node_modules` from its build cache. The keys' private halves go only
 into the function, which signs the samples with them. Each deployment makes new
 keys, so samples from an earlier deployment stop working. `/holder/` is static,
 so every domain of the project serves it; the shops send people to the
