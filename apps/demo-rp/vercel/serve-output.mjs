@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Serves a hosted-demo build (.vercel/output, from vercel/build.mjs) locally, as
-// Vercel routes it: /holder/ and other static files first, everything else to
-// the function. One port per domain: the first is the holder's, the others are
-// demo shops.
+// Vercel routes it: the headers config.json sets, /holder/ and other static
+// files first, everything else to the function. One port per domain: the first
+// is the holder's, the others are demo shops.
 //
 // Usage: node vercel/serve-output.mjs [--output <dir>] [--ports 4100,4101,4102]
 // Without KV_REST_API_URL, a stand-in for Upstash's REST API keeps the state in
@@ -67,6 +67,11 @@ const func = path.join(output, 'functions', 'index.func');
 const { handler } = JSON.parse(fs.readFileSync(path.join(func, '.vc-config.json'), 'utf8'));
 const { default: fn } = await import(pathToFileURL(path.join(func, handler)).href);
 
+// The routes in config.json that set headers.
+const headerRoutes = JSON.parse(fs.readFileSync(path.join(output, 'config.json'), 'utf8'))
+  .routes.filter((r) => r.headers)
+  .map((r) => ({ src: new RegExp(r.src), headers: r.headers }));
+
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.wasm': 'application/wasm' };
 const staticRoot = path.join(output, 'static');
 function staticFile(pathname) {
@@ -77,7 +82,9 @@ function staticFile(pathname) {
 
 for (const port of ports) {
   const server = http.createServer((req, res) => {
-    const file = staticFile(new URL(req.url ?? '/', 'http://x').pathname);
+    const { pathname } = new URL(req.url ?? '/', 'http://x');
+    for (const route of headerRoutes) if (route.src.test(pathname)) for (const [k, v] of Object.entries(route.headers)) res.setHeader(k, v);
+    const file = staticFile(pathname);
     if (!file) return fn(req, res);
     res.writeHead(200, { 'content-type': TYPES[path.extname(file)] ?? 'application/octet-stream' });
     fs.createReadStream(file).pipe(res);

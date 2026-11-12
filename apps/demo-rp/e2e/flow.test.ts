@@ -1,16 +1,19 @@
 // End to end in headless Chromium, Phase 5 acceptance. Two demo verifiers
 // (ports 4101 and 4102) send the browser to the holder app (a demo build on
-// 4100), which reads a SYNTHETIC QR image, proves on the page, and posts back
-// only the proof. Verifier B is reached through its request QR, as from a
-// phone. Checks:
-//   - THREAT_MODEL T6.3: no request the browser makes carries any part of the QR;
+// 4100, cross-origin isolated as hosted), which reads a SYNTHETIC QR image or a
+// SYNTHETIC PAN record, proves on the page, and posts back only the proof.
+// Verifier B is reached through its request QR, as from a phone. For each
+// credential, checks:
+//   - THREAT_MODEL T6.3: no request the browser makes carries any part of the
+//     QR or the record;
 //   - T6.1: the proof reveals only the age bit (gender, PIN code, state are 0);
 //   - the same person gets different nullifiers at the two verifiers, and a
 //     second account at the same verifier is refused (NULLIFIER_SEEN).
 //
 // Run: npm run test:e2e (builds the holder app in demo mode first; downloads
-// the circuit artifacts from Anon Aadhaar's host once). Needs Chromium:
-// npx playwright install chromium. PLAYWRIGHT=<path> uses another Playwright.
+// the circuit artifacts from Anon Aadhaar's host once, and Barretenberg's setup
+// points from Aztec's). Needs Chromium: npx playwright install chromium.
+// PLAYWRIGHT=<path> uses another Playwright.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
@@ -18,13 +21,14 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PROOF_TIMEOUT, holderFlows, qrNeedles, readQr } from './helpers.ts';
+import { PROOF_TIMEOUT, holderFlows, panNeedles, qrNeedles, readQr } from './helpers.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const rpDir = path.join(here, '..');
 const frontend = path.join(rpDir, '..', '..', 'frontend');
 const HOLDER = 'http://localhost:4100';
 const [A, B] = ['http://localhost:4101', 'http://localhost:4102'];
+const PAN_FILE = path.join(rpDir, '.demo', 'synthetic-pan.xml');
 
 const children: ChildProcess[] = [];
 let staticServer: http.Server;
@@ -33,12 +37,17 @@ const captured: { url: string; method: string; body: string | null }[] = [];
 
 function serveDist() {
   const dist = path.join(frontend, 'dist');
-  const types: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
+  const types: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.wasm': 'application/wasm' };
   return http.createServer((req, res) => {
     const pathname = new URL(req.url ?? '/', HOLDER).pathname;
     let file = path.join(dist, path.normalize(pathname));
     if (!file.startsWith(dist) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(dist, 'index.html');
-    res.writeHead(200, { 'content-type': types[path.extname(file)] ?? 'application/octet-stream' });
+    // Cross-origin isolated, as the hosted holder app (vite.config.js, vercel/build.mjs).
+    res.writeHead(200, {
+      'content-type': types[path.extname(file)] ?? 'application/octet-stream',
+      'cross-origin-opener-policy': 'same-origin',
+      'cross-origin-embedder-policy': 'require-corp',
+    });
     fs.createReadStream(file).pipe(res);
   });
 }
@@ -119,26 +128,56 @@ test('a second account at the same verifier is refused: NULLIFIER_SEEN', { timeo
   assert.equal(again.status.code, 'NULLIFIER_SEEN');
 });
 
-test('T6.1: what reached the verifiers is a proof and nine signals; gender, PIN code and state are 0', () => {
-  const posts = captured.filter((r) => r.method === 'POST' && /\/zkid\/response\//.test(r.url));
-  assert.equal(posts.length, 3);
-  for (const post of posts) {
-    const body = JSON.parse(post.body ?? '');
-    assert.deepEqual(Object.keys(body).sort(), ['proof', 'publicSignals']);
+let panFirst: any;
+
+test('a verifier accepts a proof made from a synthetic PAN record, and grants that person an account', { timeout: PROOF_TIMEOUT }, async () => {
+  panFirst = await proveAt(A, PAN_FILE);
+  assert.match(panFirst.answer, /Accepted/);
+  assert.equal(panFirst.status.ok, true);
+  assert.equal(panFirst.status.document, 'pan');
+  assert.equal(panFirst.status.account, 2);
+});
+
+test('T5.5 (PAN): another verifier, reached through its request QR, sees a different nullifier; a second account at the first is refused', { timeout: 2 * PROOF_TIMEOUT }, async () => {
+  const second = await proveViaRequestQr(B, PAN_FILE);
+  assert.equal(second.status.ok, true);
+  assert.notEqual(second.status.nullifier, panFirst.status.nullifier);
+  await context.clearCookies();
+  const again = await proveAt(A, PAN_FILE);
+  assert.match(again.answer, /Refused/);
+  assert.equal(again.status.code, 'NULLIFIER_SEEN');
+});
+
+test('T6.1: what reached the verifiers is a proof and its public values; the gender, PIN code and state are 0', () => {
+  const posts = captured.filter((r) => r.method === 'POST' && /\/zkid\/response\//.test(r.url)).map((r) => JSON.parse(r.body ?? ''));
+  const aadhaar = posts.filter((body) => body.document === 'aadhaar');
+  const pan = posts.filter((body) => body.document === 'pan');
+  assert.deepEqual([aadhaar.length, pan.length], [3, 3]);
+  for (const body of aadhaar) {
+    assert.deepEqual(Object.keys(body).sort(), ['document', 'proof', 'publicSignals']);
     assert.equal(body.publicSignals.length, 9);
     assert.deepEqual(body.publicSignals.slice(4, 7), ['0', '0', '0']);
   }
+  for (const body of pan) {
+    // dobCutoff, nullifierSeed, signalHash, pubkeyHash, nullifier, verifiedHour, bornBy, gender
+    assert.deepEqual(Object.keys(body).sort(), ['document', 'proof', 'publicInputs']);
+    assert.equal(body.publicInputs.length, 8);
+    assert.deepEqual(body.publicInputs.slice(6).map(BigInt), [1n, 0n]);
+  }
 });
 
-test('T6.3: no request carries any part of the QR', async () => {
+test('T6.3: no request carries any part of the QR or the PAN record', async () => {
   // The circuit artifacts (worker requests) and the proofs were captured, so the
   // capture covers the worker as well as the page.
   assert.ok(captured.some((r) => r.url.includes('circuit_final_0.gz')), 'worker requests are captured');
 
-  const needles = qrNeedles(readQr(fs.readFileSync(path.join(rpDir, '.demo', 'synthetic-qr.png'))));
+  const needles = [
+    ...qrNeedles(readQr(fs.readFileSync(path.join(rpDir, '.demo', 'synthetic-qr.png')))),
+    ...panNeedles(fs.readFileSync(PAN_FILE, 'utf8')),
+  ];
   for (const r of captured) {
     for (const needle of needles) {
-      assert.ok(!r.url.includes(needle) && !(r.body ?? '').includes(needle), `${r.method} ${r.url} carries part of the QR`);
+      assert.ok(!r.url.includes(needle) && !(r.body ?? '').includes(needle), `${r.method} ${r.url} carries part of the QR or the record`);
     }
   }
 });

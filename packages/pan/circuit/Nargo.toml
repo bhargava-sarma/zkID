@@ -1,0 +1,7 @@
+[package]
+name = "pan_verifier"
+type = "bin"
+authors = ["zkID"]
+compiler_version = ">=1.0.0"
+
+[dependencies]

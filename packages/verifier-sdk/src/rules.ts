@@ -1,11 +1,12 @@
-// A verifier's rules: what the holder's QR must show. Shared by the verifier
-// SDK and the holder app, so it uses only Web APIs.
+// A verifier's rules: what the holder's credential must show. Shared by the
+// verifier SDK and the holder app, so it uses only Web APIs.
 //
-// Anon Aadhaar's circuit outputs "19 or older" as a single bit, but gender, PIN
-// code and state as their values. So a rule on one of those three reveals the
-// holder's value of that field to the verifier, not only that it passes
+// Both circuits output "19 or older" as a single bit, but gender (and, for an
+// Aadhaar QR, PIN code and state) as values. So a rule on one of those reveals
+// the holder's value of that field to the verifier, not only that it passes
 // (THREAT_MODEL decision 5). The holder app checks the rules on the device and
-// reveals nothing when they fail.
+// reveals nothing when they fail. A PAN record has no address, so a request
+// that accepts it has no rule on PIN code or state (request.ts).
 
 import { RequestError } from './errors.ts';
 
@@ -13,7 +14,7 @@ export const GENDERS = { M: 'Male', F: 'Female', T: 'Transgender' } as const;
 export type Gender = keyof typeof GENDERS;
 
 export interface Rules {
-  age19: boolean; // the QR must show 19 or older on the day it was generated
+  age19: boolean; // 19 or older: on the day an Aadhaar QR was generated, on the day a PAN request was issued (panDobCutoff)
   gender?: Gender[]; // accepted genders
   pinCode?: string[]; // accepted PIN codes: 6 digits, or the first 1 to 5 digits of a range
   state?: string[]; // accepted states, as written on Aadhaar; case and spacing are ignored
@@ -97,6 +98,17 @@ export function ruleFailure(r: Rules, values: Disclosed): RuleFailure | undefine
   if (r.pinCode && !(values.pinCode && r.pinCode.some((prefix) => values.pinCode!.startsWith(prefix)))) return 'PIN_CODE_NOT_ALLOWED';
   if (r.state && !(values.state && r.state.some((s) => normalState(s) === normalState(values.state!)))) return 'STATE_NOT_ALLOWED';
   return undefined;
+}
+
+// "19 or older" for a PAN proof: born on or before this date (YYYYMMDD), the
+// request's issue day in India less 19 years. The verifier sets it from the
+// request, so it cannot ask about any other date (THREAT_MODEL A6.3); 29
+// February becomes 28 February in a year without one.
+export function panDobCutoff(issuedAt: number): number {
+  const ist = new Date((issuedAt + 19800) * 1000);
+  const [year, month, day] = [ist.getUTCFullYear() - 19, ist.getUTCMonth() + 1, ist.getUTCDate()];
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return year * 10000 + month * 100 + Math.min(day, lastDay);
 }
 
 // Only the fields the rules name.

@@ -2,9 +2,13 @@
 // the holder app's look (frontend/src/App.css). No web fonts and no script
 // except the request-QR page's poll.
 
-import { GENDERS, type Disclosed, type Rules, type VerifyResult } from '../../packages/verifier-sdk/src/index.ts';
+import { GENDERS, type Disclosed, type Document, type Rules, type VerifyResult } from '../../packages/verifier-sdk/src/index.ts';
 
-export type Session = { challenge?: string; result?: VerifyResult; account?: number; rules?: Rules };
+export type Session = { challenge?: string; result?: VerifyResult; account?: number; rules?: Rules; documents?: Document[] };
+// What a visitor's shop accepts: the credentials, and the rules they must meet.
+export type Accepted = { documents: Document[]; rules: Rules };
+
+const CREDENTIALS: Record<Document, string> = { aadhaar: 'Aadhaar QR', pan: 'PAN record' };
 
 // States and union territories as commonly written, for the rule and sample
 // pickers. A rule must match the spelling on Aadhaar (case and spacing aside).
@@ -79,6 +83,7 @@ form.inline{display:contents}
 [data-kind=gender]::before,.dot[data-kind=gender]{background:var(--blue)}
 [data-kind=pinCode]::before,.dot[data-kind=pinCode]{background:var(--green)}
 [data-kind=state]::before,.dot[data-kind=state]{background:var(--yellow)}
+[data-kind=doc]::before{background:var(--ink)}
 .screen{position:relative;overflow:hidden;padding:20px 20px 22px;border-radius:var(--radius);background:var(--screen);color:var(--screen-ink);border:1px solid #000;min-height:160px}
 .screen::after{content:'';position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(255,255,255,.035) 0 1px,transparent 1px 3px)}
 .screen .label{margin:0;font:600 11px/1 var(--mono);text-transform:uppercase;letter-spacing:.14em;color:#8f8e86}
@@ -92,7 +97,8 @@ form.inline{display:contents}
 .note{margin:12px 0 0;font-size:13px;color:var(--sub)}
 .sample{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));align-items:end}
 .sample .key{grid-column:1/-1}
-@media (min-width:860px){.sample{grid-template-columns:repeat(4,1fr) auto}.sample .key{grid-column:auto}}
+@media (min-width:860px){.sample{grid-template-columns:repeat(4,1fr) auto}.sample--pan{grid-template-columns:repeat(2,1fr) auto}.sample .key{grid-column:auto}}
+.sample+.note{margin-bottom:18px}
 .qrbox{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
 .qrbox img{width:min(300px,80vw);height:auto;border-radius:12px;background:#fff;padding:8px;border:1.5px solid var(--ink)}
 .mono{font-family:var(--mono);font-size:12px;overflow-wrap:anywhere}
@@ -108,26 +114,33 @@ ${body}
 <footer class="foot">Verifier ${escape(site)} · a zkID demo, not a real shop</footer></div></body></html>`;
 }
 
-// The rules as chips.
-export function ruleChips(rules: Rules) {
-  const chips: [string, string][] = [];
+// The credentials and rules as chips.
+export function ruleChips({ documents, rules }: Accepted) {
+  const chips: [string, string][] = [['doc', documents.map((d) => CREDENTIALS[d]).join(' or ')]];
   if (rules.age19) chips.push(['age', '19 or older']);
   if (rules.gender) chips.push(['gender', `Gender: ${rules.gender.map((g) => GENDERS[g]).join(' / ')}`]);
   if (rules.pinCode) chips.push(['pinCode', `PIN: ${rules.pinCode.map(pinShown).join(' / ')}`]);
   if (rules.state) chips.push(['state', `State: ${rules.state.join(' / ')}`]);
-  if (!chips.length) chips.push(['none', 'Any UIDAI-signed QR']);
+  if (chips.length === 1) chips.push(['none', 'Nothing more']);
   return `<ul class="chips" data-testid="rules">${chips.map(([kind, text]) => `<li class="chip" data-kind="${kind}">${escape(text)}</li>`).join('')}</ul>`;
 }
 
 const toggle = (name: string, value: string, label: string, checked: boolean, type = 'checkbox') =>
   `<label class="toggle"><input type="${type}" name="${name}" value="${escape(value)}"${checked ? ' checked' : ''}><span>${escape(label)}</span></label>`;
 
-function rulesForm(rules: Rules, error?: string) {
+function rulesForm({ documents, rules }: Accepted, error?: string) {
   const states = rules.state ?? [];
   const other = states.filter((s) => !STATES.some((known) => known.toLowerCase() === s.toLowerCase()));
   return `<section class="panel" aria-labelledby="rules-h"><h2 id="rules-h"><span class="num">01</span>Your rules for this shop</h2>
 ${error ? `<p class="alert" role="alert" data-testid="rules-error">${escape(error)}</p>` : ''}
 <form method="post" action="/rules" data-testid="rules-form">
+<div class="field"><span class="flabel">Credentials · at least one</span><div class="row">${toggle('document', 'aadhaar', 'Aadhaar QR', documents.includes('aadhaar'))}${toggle(
+    'document',
+    'pan',
+    'PAN record (DigiLocker)',
+    documents.includes('pan'),
+  )}</div>
+<p class="hint">A PAN record has no address: a rule on PIN code or state needs Aadhaar QRs only.</p></div>
 <div class="field"><span class="flabel">Age</span><div class="row">${toggle('age19', 'on', '19 or older', rules.age19)}</div></div>
 <div class="field"><span class="flabel">Gender · none picked = any</span><div class="row">${Object.entries(GENDERS)
     .map(([g, label]) => toggle('gender', g, label, rules.gender?.includes(g as keyof typeof GENDERS) ?? false))
@@ -141,7 +154,7 @@ ${error ? `<p class="alert" role="alert" data-testid="rules-error">${escape(erro
   ).join('')}${other.map((s) => toggle('state', s, s, true)).join('')}</div></details></div>
 <button class="key key--wide" data-testid="save-rules">Save rules</button>
 </form>
-<p class="note">Your rules apply to your visit only. A rule on gender, PIN code or state shows this shop the value on your QR, not only that it passes: that is how the circuit works. Age shows only "19 or older".</p>
+<p class="note">Your rules apply to your visit only. A rule on gender, PIN code or state shows this shop the value on your credential, not only that it passes: that is how the circuits work. Age shows only "19 or older".</p>
 </section>`;
 }
 
@@ -163,54 +176,79 @@ function result(session: Session) {
   if (r.ok) {
     return `<section class="screen" data-testid="granted"><p class="label">03 · Proof checked</p><p class="big ok">Accepted</p>
 <p>Access granted. Your account here is <strong>#${String(session.account).padStart(3, '0')}</strong>.</p>
+<p data-testid="document">Proved with ${r.document === 'pan' ? 'a PAN record' : 'an Aadhaar QR'}</p>
 <p>Code <span>${escape(r.nullifier.slice(0, 10))}…</span> · one per person here</p>${learned(r.disclosed)}</section>`;
   }
   return `<section class="screen" data-testid="refused"><p class="label">03 · Proof checked</p><p class="big no">Refused</p><p>${escape(r.code)}. ${escape(r.detail)}</p></section>`;
 }
 
-function sampleForm() {
-  return `<section class="panel span" aria-labelledby="sample-h"><h2 id="sample-h"><span class="num">04</span>No Aadhaar at hand? Make a test QR</h2>
-<form method="get" action="/sample-qr.png" class="sample" data-testid="sample-form">
+const genderOptions = () => Object.entries(GENDERS).map(([g, label]) => `<option value="${g}">${label}</option>`).join('');
+
+function sampleForms(qr: boolean, pan: boolean) {
+  return `<section class="panel span" aria-labelledby="sample-h"><h2 id="sample-h"><span class="num">04</span>No Aadhaar or PAN at hand? Make a test one</h2>
+${qr ? sampleQrForm() : ''}${pan ? samplePanForm() : ''}</section>`;
+}
+
+function samplePanForm() {
+  return `<form method="get" action="/sample-pan.xml" class="sample sample--pan" data-testid="sample-pan-form">
 <label><span class="flabel">Age</span><select name="age"><option value="adult">Adult</option><option value="minor">Under 19</option></select></label>
-<label><span class="flabel">Gender</span><select name="gender">${Object.entries(GENDERS).map(([g, label]) => `<option value="${g}">${label}</option>`).join('')}</select></label>
+<label><span class="flabel">Gender</span><select name="gender">${genderOptions()}</select></label>
+<button class="key key--wide">Download test PAN record</button>
+</form>
+<p class="note">A synthetic PAN Verification Record (XML, name "SYNTHETIC TEST PERSON", PAN TESTP0000T, verified now) signed with this deployment's TEST key, not DigiLocker's. Only this demo trusts it. Each download is another person.</p>`;
+}
+
+function sampleQrForm() {
+  return `<form method="get" action="/sample-qr.png" class="sample" data-testid="sample-form">
+<label><span class="flabel">Age</span><select name="age"><option value="adult">Adult</option><option value="minor">Under 19</option></select></label>
+<label><span class="flabel">Gender</span><select name="gender">${genderOptions()}</select></label>
 <label><span class="flabel">PIN code</span><input type="text" name="pin" inputmode="numeric" value="560034" pattern="[1-9][0-9]{5}" required></label>
 <label><span class="flabel">State</span><select name="state">${STATES.map((s) => `<option${s === 'Karnataka' ? ' selected' : ''}>${escape(s)}</option>`).join('')}</select></label>
 <button class="key key--wide">Download test QR</button>
 </form>
-<p class="note">A synthetic QR (name "SYNTHETIC TEST PERSON") signed with this deployment's TEST key, not UIDAI's. Only this demo trusts it. Open it in zkID when the shop sends you there.</p>
-</section>`;
+<p class="note">A synthetic QR (name "SYNTHETIC TEST PERSON") signed with this deployment's TEST key, not UIDAI's. Only this demo trusts it. Open it in zkID when the shop sends you there.</p>`;
 }
 
-export function shopPage(o: { site: string; session: Session; rules: Rules; testIssuerLabel?: string; samples: boolean; error?: string }) {
+// What the visitor needs, for the credentials the shop accepts.
+function needs(documents: Document[]) {
+  const what = documents.map((d) =>
+    d === 'pan'
+      ? "your PAN Verification Record's XML from DigiLocker, verified by DigiLocker in the last 7 days"
+      : 'an image of the QR on an e-Aadhaar downloaded in the last 7 days',
+  );
+  return `You need ${what.join(', or ')}.`;
+}
+
+export function shopPage(o: { site: string; session: Session; accepted: Accepted; testIssuerLabel?: string; samples: boolean; panSamples: boolean; error?: string }) {
   const r = o.session.result;
   const led = !r ? 'idle' : r.ok ? 'ok' : 'error';
   const body = `<section class="hero"><p class="kicker">Demo shop · verifier</p><h1>Set the rules.<br>See only the proof.</h1>
-<p class="lede">This shop checks your Aadhaar QR against your rules without ever seeing the QR. The proof is made on your device by the zkID app.</p></section>
+<p class="lede">This shop checks your Aadhaar QR or DigiLocker PAN record against your rules without ever seeing it. The proof is made on your device by the zkID app.</p></section>
 <div class="grid">
-${rulesForm(o.rules, o.error)}
+${rulesForm(o.accepted, o.error)}
 <div class="col">
 <section class="panel" aria-labelledby="verify-h"><h2 id="verify-h"><span class="num">02</span>Verify against</h2>
-${ruleChips(o.rules)}
+${ruleChips(o.accepted)}
 <div class="actions">
 <form method="post" action="/start" class="inline"><button class="key key--primary key--wide" data-testid="verify">Verify with zkID</button></form>
 <form method="post" action="/start?qr" class="inline"><button class="key key--wide" data-testid="verify-phone">Verify on my phone</button></form>
 </div>
-<p class="note">You need an image of the QR on an e-Aadhaar downloaded in the last 7 days. The age check runs on your device, on your own QR. This site receives a proof and a per-site code, plus the values your rules name, and keeps the code for 7 days.</p>
+<p class="note">${needs(o.accepted.documents)} The checks run on your device. This site receives a proof and a per-site code, plus the values your rules name, and keeps the code for 7 days.</p>
 </section>
 <div aria-live="polite">${result(o.session)}</div>
 </div>
-${o.samples ? sampleForm() : ''}
+${o.samples || o.panSamples ? sampleForms(o.samples, o.panSamples) : ''}
 </div>
-${o.testIssuerLabel ? `<p class="note">Demo: besides UIDAI, this shop trusts ${escape(o.testIssuerLabel)}.</p>` : ''}`;
+${o.testIssuerLabel ? `<p class="note">Demo: besides UIDAI's and DigiLocker's keys, this shop trusts ${escape(o.testIssuerLabel)}.</p>` : ''}`;
   return layout(o.site, `Demo shop · ${host(o.site)}`, led, body);
 }
 
 // The request as a QR, for the holder app on another device. The page polls
 // for the result, which arrives when that device posts the proof.
-export function qrPage(site: string, rules: Rules, qr: string, url: string) {
+export function qrPage(site: string, accepted: Accepted, qr: string, url: string) {
   const body = `<section class="hero"><p class="kicker">Demo shop · verify on your phone</p><h1>Scan to prove.</h1></section>
 <section class="panel qrbox" aria-labelledby="qr-h"><h2 id="qr-h"><span class="num">02</span>Request</h2>
-${ruleChips(rules)}
+${ruleChips(accepted)}
 <img data-testid="request-qr" src="${qr}" alt="QR code of the zkID request" width="300" height="300">
 <p>Scan this with your phone's camera to open the request in zkID there.</p>
 <p class="mono"><a href="${escape(url)}">${escape(url)}</a></p>

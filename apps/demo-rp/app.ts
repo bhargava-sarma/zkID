@@ -1,8 +1,9 @@
 // Demo relying party ("Demo shop"): a page that uses the verifier SDK end to
-// end. Each visitor sets the shop's rules for their own visit: 19 or older,
-// and gender, PIN code and state, which a proof reveals by value. The shop
-// never sees a QR: it issues a request, the holder app proves on the person's
-// device, and only the proof comes back. One account per nullifier.
+// end. Each visitor sets the shop's rules for their own visit: the credentials
+// it accepts (an Aadhaar QR, a DigiLocker PAN record, or either), 19 or older,
+// and gender, PIN code and state, which a proof reveals by value. The shop never
+// sees a QR or a record: it issues a request, the holder app proves on the
+// person's device, and only the proof comes back. One account per nullifier.
 // createDemoApp serves one or more shops, each identified by the origin a
 // request arrives on: server.ts runs one locally, vercel/handler.ts several on
 // Vercel. The pages are in views.ts.
@@ -10,17 +11,20 @@
 import crypto from 'node:crypto';
 import type http from 'node:http';
 import QRCode from 'qrcode';
-import { GENDERS, RequestError, checkRules, createVerifier, type ProofRequest, type Rules, type Store } from '../../packages/verifier-sdk/src/index.ts';
+import { DOCUMENTS, GENDERS, RequestError, checkAccepted, createVerifier, type Document, type ProofRequest, type Rules, type Store } from '../../packages/verifier-sdk/src/index.ts';
 import { checkRegistry, productionRegistry, testRegistry, type Registry } from '../../packages/issuer-registry/index.ts';
 import { makeSyntheticSecureQr, syntheticFields, syntheticPhoto, unknownTrailer } from '../../packages/secure-qr/synthetic.mjs';
+import { GENDER_VALUES } from '../../packages/pan/format.mjs';
+import { istStamp, makeRecord, testIssuer as panTestIssuer } from '../../packages/pan/synthetic.mjs';
 import type { KV } from './kv.ts';
-import { STATES, qrPage, shopPage, type Session } from './views.ts';
+import { STATES, qrPage, shopPage, type Accepted, type Session } from './views.ts';
 
 const REQUEST_TTL = 15 * 60; // the SDK's default is 5 minutes; on a phone, proving alone can take minutes
-const MAX_AGE = 7 * 86400; // a QR generated in the last 7 days
+const MAX_AGE = 7 * 86400; // a QR generated, or a PAN record verified by DigiLocker, in the last 7 days
 const SESSION_TTL = 86400;
 const CODE_TTL = 7 * 86400; // how long a shop remembers a per-site code
 const DEFAULT_RULES: Rules = { age19: true };
+const DEFAULT_DOCUMENTS: Document[] = [...DOCUMENTS];
 
 export interface DemoOptions {
   // The shop's verifier id (its origin) for this request, or null if the request is not for a shop.
@@ -28,15 +32,18 @@ export interface DemoOptions {
   holder: string; // the holder app's URL
   registry: Registry;
   kv: KV;
-  // The demo's TEST issuer, if the registry trusts one. With its private key, the shops hand out sample QRs.
-  testIssuer?: { label: string; privateKey?: crypto.KeyObject };
+  // The demo's TEST issuer, if the registry trusts its keys. With its private
+  // keys, the shops hand out sample QRs and sample PAN records.
+  testIssuer?: { label: string; privateKey?: crypto.KeyObject; panPrivateKey?: crypto.KeyObject };
 }
 
-// UIDAI's keys plus the demo's TEST keys, as setup-demo.mjs and vercel/build.mjs write them.
-export function demoRegistry(testKeys: { id: string; modulus: string; keyHash: string }[]): Registry {
+// UIDAI's and DigiLocker's keys plus the demo's TEST keys, as setup-demo.mjs
+// and vercel/build.mjs write them: one for Aadhaar QRs, one for PAN records.
+export function demoRegistry(testKeys: { id: string; modulus: string; keyHash: string; document?: Document }[]): Registry {
   const test = testRegistry(
     testKeys.map((k) => ({
       id: k.id,
+      document: k.document,
       keyHash: k.keyHash,
       publicKey: crypto.createPublicKey({ key: { kty: 'RSA', n: Buffer.from(k.modulus, 'hex').toString('base64url'), e: 'AQAB' }, format: 'jwk' }),
     })),
@@ -96,8 +103,12 @@ async function readJson(req: http.IncomingMessage): Promise<unknown> {
   }
 }
 
-// The rules form (views.ts) as rules. checkRules has the last word.
-function rulesFrom(form: URLSearchParams): Rules {
+// The rules form (views.ts): the credentials accepted, and the rules.
+// checkAccepted has the last word.
+function acceptedFrom(form: URLSearchParams): Accepted {
+  const picked = form.getAll('document');
+  if (!picked.length) throw new RequestError('INVALID_REQUEST', 'accept at least one credential: an Aadhaar QR, a PAN record, or both');
+  const documents = picked.sort((a, b) => DOCUMENTS.indexOf(a as Document) - DOCUMENTS.indexOf(b as Document));
   const rules: Rules = { age19: form.get('age19') === 'on' };
   const gender = form.getAll('gender');
   const pinCode = (form.get('pin') ?? '')
@@ -108,7 +119,14 @@ function rulesFrom(form: URLSearchParams): Rules {
   if (gender.length) rules.gender = gender as Rules['gender'];
   if (pinCode.length) rules.pinCode = pinCode;
   if (state.length) rules.state = state;
-  return checkRules(rules);
+  return checkAccepted(documents, rules);
+}
+
+// A visitor's rules, or the defaults. A session saved before the shops took PAN
+// records has no documents: with a rule on PIN code or state, it accepts Aadhaar QRs only.
+function acceptedOf(session: Session): Accepted {
+  const rules = session.rules ?? DEFAULT_RULES;
+  return { rules, documents: session.documents ?? (rules.pinCode || rules.state ? ['aadhaar'] : DEFAULT_DOCUMENTS) };
 }
 
 // A synthetic QR, signed by the TEST issuer, as a PNG: an adult born in 1990,
@@ -134,8 +152,25 @@ async function sampleQr(privateKey: crypto.KeyObject, params: URLSearchParams) {
   return { png, name: `zkid-synthetic-test-qr-${minor ? 'under-19' : 'adult'}-${gender}-${pincode}.png` };
 }
 
+const PAN_GENDERS = Object.fromEntries(Object.entries(GENDER_VALUES).map(([word, g]) => [g, word])) as Record<string, string>;
+
+// A synthetic PAN Verification Record, signed by the TEST issuer, as the XML
+// DigiLocker serves: an adult born in 1990, or someone 17 years old today, of
+// the gender asked for, verified now. Each is another person (another uid).
+async function samplePan(issuer: unknown, params: URLSearchParams) {
+  const now = new Date();
+  const minor = params.has('minor') || params.get('age') === 'minor';
+  const gender = params.get('gender') ?? 'M';
+  if (!Object.hasOwn(GENDERS, gender)) throw new BadRequest('gender must be M, F or T');
+  const today = istStamp(now).slice(0, 10); // dd-mm-yyyy, in India
+  const dob = minor ? `${today.slice(0, 6)}${Number(today.slice(6)) - 17}`.replace(/^29-02/, '28-02') : '01-01-1990';
+  const xml: string = await makeRecord(issuer, { dob, gender: PAN_GENDERS[gender], verifiedOn: istStamp(now) });
+  return { xml, name: `zkid-synthetic-test-pan-record-${minor ? 'under-19' : 'adult'}-${gender}.xml` };
+}
+
 export function createDemoApp(options: DemoOptions) {
   const { kv, registry, testIssuer } = options;
+  const panIssuer = testIssuer?.panPrivateKey ? panTestIssuer(testIssuer.panPrivateKey) : null;
   const holder = new URL(options.holder);
   const cors = { 'access-control-allow-origin': holder.origin, 'access-control-allow-methods': 'GET, POST', 'access-control-allow-headers': 'content-type' };
   const verifiers = new Map<string, ReturnType<typeof createVerifier>>();
@@ -148,7 +183,7 @@ export function createDemoApp(options: DemoOptions) {
 
   const holderUrl = (site: string, challenge: string) => `${holder.href}?request=${encodeURIComponent(`${site}/zkid/request/${challenge}`)}`;
   const page = (site: string, session: Session, error?: string) =>
-    shopPage({ site, session, rules: session.rules ?? DEFAULT_RULES, testIssuerLabel: testIssuer?.label, samples: !!testIssuer?.privateKey, error });
+    shopPage({ site, session, accepted: acceptedOf(session), testIssuerLabel: testIssuer?.label, samples: !!testIssuer?.privateKey, panSamples: !!panIssuer, error });
 
   // Browsers share cookies across the ports of one host, so each shop on
   // localhost needs its own cookie name, or they overwrite each other's session.
@@ -188,23 +223,23 @@ export function createDemoApp(options: DemoOptions) {
     }
     if (req.method === 'POST' && url.pathname === '/rules') {
       const { sid, session } = await sessionOf(site, req, res);
-      let rules: Rules;
+      let accepted: Accepted;
       try {
-        rules = rulesFrom(new URLSearchParams(await readBody(req, 16 * 1024)));
+        accepted = acceptedFrom(new URLSearchParams(await readBody(req, 16 * 1024)));
       } catch (err) {
         if (!(err instanceof RequestError)) throw err;
         res.writeHead(400, { 'content-type': 'text/html; charset=utf-8' });
         return res.end(page(site, session, `Those rules were not saved: ${err.message.replace(/^INVALID_REQUEST: /, '')}.`));
       }
-      await saveSession(site, sid, { ...session, rules });
+      await saveSession(site, sid, { ...session, ...accepted });
       return redirect(res, '/');
     }
     if (req.method === 'POST' && url.pathname === '/start') {
       const { sid, session } = await sessionOf(site, req, res);
-      const rules = session.rules ?? DEFAULT_RULES;
-      const request = await verifierFor(site).createRequest({ maxAgeSeconds: MAX_AGE, rules });
+      const accepted = acceptedOf(session);
+      const request = await verifierFor(site).createRequest({ maxAgeSeconds: MAX_AGE, ...accepted });
       await kv.set(`zkid:${site}:pend:${request.challenge}`, JSON.stringify({ request, sid }), REQUEST_TTL + 60);
-      await saveSession(site, sid, { challenge: request.challenge, rules });
+      await saveSession(site, sid, { challenge: request.challenge, ...accepted });
       return redirect(res, url.searchParams.has('qr') ? '/qr' : holderUrl(site, request.challenge));
     }
     if (req.method === 'GET' && url.pathname === '/qr') {
@@ -213,7 +248,7 @@ export function createDemoApp(options: DemoOptions) {
       const target = holderUrl(site, session.challenge);
       const qr = await QRCode.toDataURL(target, { errorCorrectionLevel: 'M', margin: 4, scale: 6 });
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-      return res.end(qrPage(site, session.rules ?? DEFAULT_RULES, qr, target));
+      return res.end(qrPage(site, acceptedOf(session), qr, target));
     }
     if (req.method === 'GET' && url.pathname === '/zkid/status') {
       const { session } = await sessionOf(site, req, res);
@@ -223,6 +258,11 @@ export function createDemoApp(options: DemoOptions) {
       const { png, name } = await sampleQr(testIssuer.privateKey, url.searchParams);
       res.writeHead(200, { 'content-type': 'image/png', 'content-disposition': `attachment; filename="${name}"`, 'cache-control': 'no-store' });
       return res.end(png);
+    }
+    if (req.method === 'GET' && url.pathname === '/sample-pan.xml' && panIssuer) {
+      const { xml, name } = await samplePan(panIssuer, url.searchParams);
+      res.writeHead(200, { 'content-type': 'application/xml; charset=utf-8', 'content-disposition': `attachment; filename="${name}"`, 'cache-control': 'no-store' });
+      return res.end(xml);
     }
     if (challenge && req.method === 'OPTIONS') {
       res.writeHead(204, cors);
@@ -238,11 +278,14 @@ export function createDemoApp(options: DemoOptions) {
       const entry = await kv.get(pendingKey);
       if (!entry) return json(res, 404, { ok: false, code: 'CHALLENGE_MISMATCH', detail: 'unknown request' });
       const { request, sid } = JSON.parse(entry) as { request: ProofRequest; sid: string };
-      const body = (await readJson(req)) as { proof?: unknown; publicSignals?: unknown };
-      const result = await verifierFor(site).verify(body?.proof, body?.publicSignals, request);
+      // The holder app names the circuit that made the proof: an Aadhaar proof
+      // comes with its public signals, a PAN proof with its public inputs.
+      const body = (await readJson(req)) as { document?: unknown; proof?: unknown; publicSignals?: unknown; publicInputs?: unknown } | null;
+      const document = (typeof body?.document === 'string' ? body.document : null) as Document; // the SDK refuses anything else as BAD_PROOF
+      const result = await verifierFor(site).verify(body?.proof, document === 'pan' ? body?.publicInputs : body?.publicSignals, request, document);
       // Keep rules the visitor saved while the holder was proving.
       const current = JSON.parse((await kv.get(sessionKey(site, sid))) ?? '{}') as Session;
-      const session: Session = { challenge, result, rules: current.rules ?? request.rules };
+      const session: Session = { challenge, result, rules: current.rules ?? request.rules, documents: current.documents ?? request.documents };
       if (result.ok) session.account = await kv.incr(`zkid:${site}:accounts`);
       await saveSession(site, sid, session);
       console.log(`${new Date().toISOString()} ${site} ${result.ok ? `accepted, account #${session.account}` : `refused ${result.code}`}`);

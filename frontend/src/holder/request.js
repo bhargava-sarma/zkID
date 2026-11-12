@@ -5,7 +5,7 @@
 import { checkRequest, nullifierSeedFor, signalHashFor } from '../../../packages/verifier-sdk/src/request.ts';
 import { HolderError } from './errors.js';
 
-const REQUEST_FIELDS = ['version', 'verifierId', 'challenge', 'maxAgeSeconds', 'expiresAt', 'rules'];
+const REQUEST_FIELDS = ['version', 'verifierId', 'challenge', 'issuedAt', 'maxAgeSeconds', 'expiresAt', 'documents', 'rules'];
 const SERVED_FIELDS = ['request', 'responseUrl', 'returnUrl'];
 
 const originOf = (url, what) => {

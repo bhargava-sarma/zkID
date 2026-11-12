@@ -1,19 +1,21 @@
 // Holder app logic, in Node (no browser): request checks (THREAT_MODEL T5.4,
-// T6.2), QR checks against the request's rules (T6.4), and what the circuit
-// input reveals (T6.1). Run: npm test.
+// T6.2), QR and PAN record checks against the request's rules (T6.4) and date
+// (T6.5), and what each circuit's input reveals (T6.1). Run: npm test.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { acceptServedRequest, publicInputsFor } from './request.js';
 import { checkQr, inputFor } from './qr.js';
+import { checkPan, panInputFor } from './pan.js';
 import { HolderError } from './errors.js';
 import { importRsaKey } from '../../../packages/secure-qr/web.mjs';
 import { makeSyntheticSecureQr, syntheticFields, syntheticPhoto, unknownTrailer } from '../../../packages/secure-qr/synthetic.mjs';
+import { makeRecord, testIssuer, testKey } from '../../../packages/pan/synthetic.mjs';
 import { nullifierSeedFor, signalHashFor } from '../../../packages/verifier-sdk/src/request.ts';
 
 const A = 'https://shop.example';
 const NOW = Date.parse('2026-10-26T06:00:00Z') / 1000;
-const request = { version: 2, verifierId: A, challenge: 'ab'.repeat(32), maxAgeSeconds: 7 * 86400, expiresAt: NOW + 300, rules: { age19: true } };
+const request = { version: 3, verifierId: A, challenge: 'ab'.repeat(32), issuedAt: NOW, maxAgeSeconds: 7 * 86400, expiresAt: NOW + 300, documents: ['aadhaar'], rules: { age19: true } };
 const withRules = (rules) => ({ ...request, rules });
 const served = (overrides = {}, requestOverrides = {}) => ({
   request: { ...request, ...requestOverrides },
@@ -128,4 +130,52 @@ test('a QR the circuit cannot read is refused before the download, whatever the 
   await checkRejects(checkQr(qr({ pincode: '56003' }), keyList, request, NOW), 'UNSUPPORTED_PIN_CODE');
   await checkRejects(checkQr(qr({ pincode: '5600AB' }), keyList, withRules({ age19: true, pinCode: ['5600'] }), NOW), 'UNSUPPORTED_PIN_CODE');
   await checkRejects(checkQr(qr({ gender: 'MF' }), keyList, request, NOW), 'UNSUPPORTED_GENDER');
+});
+
+// ---- The PAN record -------------------------------------------------------------------
+
+const panIssuer = testIssuer();
+const panKeys = [testKey(panIssuer)];
+const panRequest = { ...request, documents: ['pan'] }; // issued at 11:30 IST on 26 October 2026
+const record = (options = {}) => makeRecord(panIssuer, { dob: '01-01-1990', gender: 'FEMALE', verifiedOn: '26-10-2026 10:00:00', ...options });
+
+test('a PAN record signed by a trusted key, verified recently, of someone 19 or older, passes', async () => {
+  const checked = await checkPan(await record(), panKeys, panRequest, NOW);
+  assert.equal(checked.signer.id, 'test-pan-key');
+  assert.equal(checked.verifiedAt.getTime(), Date.parse('2026-10-26T10:00:00+05:30'));
+  assert.deepEqual(checked.disclosed, {});
+});
+
+test('T6.4: a PAN record the website would refuse is caught before proving', async () => {
+  await checkRejects(checkPan(await record(), [testKey(testIssuer())], panRequest, NOW), 'UNTRUSTED_RECORD');
+  await checkRejects(checkPan(await record(), [{ ...panKeys[0], notAfter: 1 }], panRequest, NOW), 'KEY_NOT_VALID');
+  await checkRejects(checkPan(await record({ verifiedOn: '01-09-2026 10:00:00' }), panKeys, panRequest, NOW), 'RECORD_TOO_OLD');
+  // 19 years before the request's day, 26 October 2026 in India.
+  await checkRejects(checkPan(await record({ dob: '27-10-2007' }), panKeys, panRequest, NOW), 'NOT_19');
+  await assert.doesNotReject(checkPan(await record({ dob: '26-10-2007' }), panKeys, panRequest, NOW));
+  await checkRejects(checkPan(await record(), panKeys, { ...panRequest, rules: { age19: true, gender: ['M', 'T'] } }, NOW), 'GENDER_NOT_ACCEPTED');
+  await checkRejects(checkPan('<Certificate/>', panKeys, panRequest, NOW), 'NOT_A_RECORD');
+});
+
+test('T6.5: a PAN proof for a request dated more than a day back, or more than ten minutes ahead, is refused before proving', async () => {
+  const dated = (issuedAt) => ({ ...panRequest, issuedAt, expiresAt: NOW + 300 });
+  for (const issuedAt of [NOW - 86401, NOW - 20 * 365 * 86400, NOW + 601, NOW + 5 * 365 * 86400]) {
+    await checkRejects(checkPan(await record(), panKeys, dated(issuedAt), NOW), 'REQUEST_NOT_CURRENT');
+  }
+  for (const issuedAt of [NOW - 86400, NOW + 600]) await assert.doesNotReject(checkPan(await record(), panKeys, dated(issuedAt), NOW));
+});
+
+test("T6.1: a PAN proof's input reveals the gender only under a gender rule, and carries the request's age cutoff", async () => {
+  for (const [rules, reveal] of [
+    [{ age19: true }, false],
+    [{ age19: false, gender: ['F'] }, true],
+  ]) {
+    const r = { ...panRequest, rules };
+    const checked = await checkPan(await record(), panKeys, r, NOW);
+    assert.deepEqual(checked.disclosed, reveal ? { gender: 'F' } : {});
+    const input = panInputFor(checked, await publicInputsFor(r), r);
+    assert.equal(input.reveal_gender, reveal);
+    assert.equal(input.dob_cutoff, 20071026);
+    assert.equal(input.signal_hash, await signalHashFor(r));
+  }
 });

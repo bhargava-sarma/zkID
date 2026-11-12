@@ -179,3 +179,58 @@ version 2.
 
 In the demo, each visitor sets the shop's rules for their own visit, and the
 shops' test QRs take a chosen gender, PIN code and state.
+
+## 11. A second credential: DigiLocker PAN records
+
+On 2026-11-11 the owner asked to prove claims from a DigiLocker PAN
+Verification Record, as well as from an Aadhaar QR, and on 2026-11-12 to build
+it into the app. A request now lists the credentials it accepts (`documents`:
+`aadhaar`, `pan`, or both), and the holder app proves whichever the person
+chooses (THREAT_MODEL, decision 6). The request format moved to version 3,
+which also carries the time the request was made (`issuedAt`).
+
+What was chosen, and why:
+
+- **The XML, signed by DigiLocker.** DigiLocker offers the record as PDF, XML
+  and JSON. The XML carries an XML signature by DigiLocker's own document key
+  (Digital India Corporation's, issued by ProDigiSign); the JSON's signature
+  covers an XML it does not include. The signature is DigiLocker's, not the
+  Income Tax Department's: zkID trusts DigiLocker to sign what the department
+  returned (THREAT_MODEL, S10).
+- **A circuit of zkID's own, in Noir, proved with UltraHonk.** Nobody publishes
+  a circuit for this record. A first version in circom took 213 s on the owner's
+  phone after a 536 MB download, and would have needed a trusted setup ceremony
+  of its own. The Noir version (`packages/pan`) proved on the same phone in
+  13.6 s on 8 threads and 34.5 s on one, downloads about 25 MB, and uses Aztec's
+  universal setup. It is new code, written for this project and not audited
+  (S13), and its tools are pinned exactly: a new Noir or bb.js version changes
+  the verification key, so it is a deliberate change.
+- **Age from the request's day.** The circuit compares the date of birth with a
+  cutoff. The SDK sets the cutoff to the request's day in India, 19 years
+  earlier, so "19 or older" means what it means for a QR, and binds it: a proof
+  with any other cutoff is refused. The holder app proves only for a request
+  dated today, or a verifier could move the cutoff and learn the date of birth
+  a bit at a time (A6.5).
+- **The nullifier hashes the PAN and DigiLocker's `uid`.** A PAN number has
+  about 4.6 billion possible values, few enough for a verifier to try them all
+  against `hash(seed, PAN)`. The record's `uid`, 32 hex digits DigiLocker
+  assigns to the account, is not shown to verifiers, and was the same when the
+  owner's record was fetched again (S14). If a second DigiLocker account gets
+  another `uid`, it also gets another account at a verifier (A4.8).
+- **No address rules.** A PAN record has no address, so a request that accepts
+  one cannot have a rule on PIN code or state; the SDK refuses to make one.
+- **Two credentials, two accounts.** The two circuits' nullifiers share
+  nothing, so a person with both gets two accounts at a verifier that accepts
+  both (A4.7, not defended). A verifier that needs one account per person
+  accepts one credential.
+- **A verifier needs no download.** Checking an UltraHonk proof takes two of
+  Barretenberg's setup points; the SDK embeds both, and Barretenberg checks the
+  one that matters against the hash it pins. The holder's prover downloads
+  about 20 MB of points from Aztec's CDN on its first proof.
+- **Several threads need cross-origin isolation.** The holder app's pages are
+  served with `Cross-Origin-Opener-Policy: same-origin` and
+  `Cross-Origin-Embedder-Policy: require-corp` (`vercel.json`, the demo's build
+  and Vite's servers); without them the PAN prover runs on one thread.
+
+In the demo, each visitor chooses which credentials the shop accepts, and the
+shops hand out synthetic PAN records signed with the deployment's TEST key.

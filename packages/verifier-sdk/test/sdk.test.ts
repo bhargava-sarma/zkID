@@ -67,13 +67,16 @@ test('nullifier seed and signal hash: field elements, deterministic, bound to ev
   assert.equal(seedX, await nullifierSeedFor(X));
   assert.notEqual(seedX, await nullifierSeedFor(Y));
   assert.ok(BigInt(seedX) < 2n ** 248n);
-  const request: ProofRequest = { version: 2, verifierId: X, challenge: 'ab'.repeat(32), maxAgeSeconds: 3600, expiresAt: G, rules: { age19: true } };
+  const request: ProofRequest = { version: 3, verifierId: X, challenge: 'ab'.repeat(32), issuedAt: G - 300, maxAgeSeconds: 3600, expiresAt: G, documents: ['aadhaar'], rules: { age19: true } };
   const signal = await signalHashFor(request);
   for (const changed of [
     { verifierId: Y },
     { challenge: 'cd'.repeat(32) },
+    { issuedAt: G - 301 },
     { maxAgeSeconds: 3601 },
     { expiresAt: G + 1 },
+    { documents: ['pan' as const] },
+    { documents: ['aadhaar' as const, 'pan' as const] },
     { rules: { age19: false } },
     { rules: { age19: true, gender: ['M' as const] } },
     { rules: { age19: true, pinCode: ['5600'] } },
@@ -106,7 +109,7 @@ test('rules: well formed or INVALID_REQUEST; a request carries them as sent', as
   assert.deepEqual(request.rules, { age19: false, pinCode: ['5600'] });
   await assert.rejects(verifier.createRequest({ maxAgeSeconds: 60, rules: { age19: true, gender: [] } }), (e: unknown) => e instanceof RequestError);
   assert.throws(() => checkRequest({ ...request, rules: undefined }), RequestError);
-  assert.throws(() => checkRequest({ ...request, version: 1 }), RequestError);
+  for (const version of [1, 2]) assert.throws(() => checkRequest({ ...request, version }), RequestError);
 });
 
 test("rules: the circuit's outputs, decoded and compared", () => {
@@ -176,6 +179,7 @@ before(async () => {
   requests.r6 = await issuing.createRequest({ maxAgeSeconds: 3600, rules: { age19: true, gender: ['M'] } });
   requests.r7 = await issuing.createRequest({ maxAgeSeconds: 3600, rules: { age19: true, pinCode: ['110'] } });
   requests.r8 = await issuing.createRequest({ maxAgeSeconds: 3600, rules: { age19: true, state: ['Karnataka'] } });
+  requests.r9 = await issuing.createRequest({ maxAgeSeconds: 3600, documents: ['pan'] });
   // Reveals what the request's rules name, as the holder app does, unless told otherwise.
   const proveFor = async (text: string, request: ProofRequest, seedOf = X, reveal = revealFor(request.rules)): Promise<Proof> =>
     prove(buildInput(text, keys.publicKey, { nullifierSeed: await nullifierSeedFor(seedOf), signalHash: await signalHashFor(request) }, reveal), { dir: ARTIFACTS });
@@ -195,6 +199,7 @@ before(async () => {
   proofs.p6 = await proveFor(her(G), requests.r6); // reveals F; the rules accept M
   proofs.p7 = await proveFor(her(G), requests.r7); // reveals 560034; the rules accept 110...
   proofs.p8 = await proveFor(her(G), requests.r8, X, { ...revealFor(requests.r8.rules), state: false }); // hides the state the rules name
+  proofs.p9 = await proveFor(qr(G), requests.r9); // an Aadhaar proof for a request that accepts only PAN records
 });
 const herPhoto = syntheticPhoto(900);
 
@@ -254,6 +259,17 @@ test('T7.4: a request changed after proving is CHALLENGE_MISMATCH', NEEDS_PROOFS
 test('T2.4: a request answered after it expired is CHALLENGE_EXPIRED', NEEDS_PROOFS, async () => {
   const verifier = verifierAt(requests.r1.expiresAt + 1, [requests.r1]);
   expectFailure(await verifier.verify(proofs.p1.proof, proofs.p1.publicSignals, requests.r1), 'CHALLENGE_EXPIRED');
+});
+
+test('T2.8: an Aadhaar proof for a request that accepts only PAN records is DOCUMENT_NOT_ACCEPTED, and does not use up the request', NEEDS_PROOFS, async () => {
+  const store = new MemoryStore();
+  await store.putRequest(requests.r9);
+  const verifier = createVerifier({ verifierId: X, registry, store, now: () => VERIFY_AT });
+  const { proof, publicSignals } = proofs.p9;
+  expectFailure(await verifier.verify(proof, publicSignals, requests.r9), 'DOCUMENT_NOT_ACCEPTED');
+  expectFailure(await verifier.verify(proof, publicSignals, requests.r9, 'aadhaar'), 'DOCUMENT_NOT_ACCEPTED');
+  expectFailure(await verifier.verify(proof, publicSignals, requests.r9, 'pan'), 'BAD_PROOF'); // labelled a PAN proof, it is not one
+  assert.equal((await store.getRequest(requests.r9.challenge))?.used, false);
 });
 
 test("T2.5: a proof under another verifier's nullifier seed is NULLIFIER_SEED_MISMATCH", NEEDS_PROOFS, async () => {

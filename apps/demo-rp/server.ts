@@ -3,8 +3,9 @@
 //
 // Usage: node server.ts --port 4101 [--holder http://localhost:5173] [--demo]
 //   --holder  where the holder app runs (default: the frontend's Vite dev server).
-//   --demo    also trusts the local demo's TEST issuer (run setup-demo.mjs first).
-//             Without it, only UIDAI's keys from the issuer registry are trusted.
+//   --demo    also trusts the local demo's TEST issuers (run setup-demo.mjs first).
+//             Without it, only UIDAI's and DigiLocker's keys from the issuer
+//             registry are trusted.
 // The verifier id is http://localhost:<port> unless ZKID_VERIFIER_ID is set.
 
 import fs from 'node:fs';
@@ -31,7 +32,7 @@ const app = createDemoApp({
   holder,
   registry,
   kv: new MemoryKV(),
-  testIssuer: demo ? { label: 'a local TEST issuer (not UIDAI)' } : undefined,
+  testIssuer: demo ? { label: 'local TEST issuers (not UIDAI, not DigiLocker)' } : undefined,
 });
 
 http.createServer(app).listen(port, () => console.log(`demo verifier ${verifierId}${demo ? ' (demo)' : ''}; holder app ${holder}`));

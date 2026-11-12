@@ -3,8 +3,9 @@
 // repository, so a file the function needs but the build left out fails here
 // rather than on Vercel. The holder app's demo build is on one domain (port
 // 4100, under /holder/), shops A and B on two others (4101, 4102), state in a
-// stand-in for Upstash Redis. The QRs are test QRs made by shop A. The last
-// tests set a visitor's rules on gender, PIN code and state (T6.1, T6.4).
+// stand-in for Upstash Redis. The QRs and PAN records are test ones made by
+// shop A. The last tests set a visitor's rules on gender, PIN code and state
+// (T6.1, T6.4).
 //
 // Run: npm run test:e2e (with flow.test.ts). Needs the frontend's packages
 // installed and Chromium (npx playwright install chromium).
@@ -15,7 +16,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PROOF_TIMEOUT, holderFlows, qrNeedles, readQr } from './helpers.ts';
+import { PROOF_TIMEOUT, holderFlows, openCredential, panNeedles, qrNeedles, readQr } from './helpers.ts';
 
 const rpDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HOLDER = 'http://localhost:4100/holder/';
@@ -26,6 +27,8 @@ const output = path.join(work, 'output');
 const sample = path.join(work, 'sample-qr.png'); // a man in Bengaluru, 560034, Karnataka (the default)
 const minorSample = path.join(work, 'sample-qr-under-19.png');
 const herSample = path.join(work, 'sample-qr-her.png'); // a woman in Bengaluru
+const panSample = path.join(work, 'sample-pan.xml'); // an adult man
+const panMinorSample = path.join(work, 'sample-pan-under-19.xml');
 const servers: ChildProcess[] = [];
 let browser: any;
 const captured: { url: string; method: string; body: string | null }[] = [];
@@ -60,6 +63,14 @@ async function download(url: string, file: string) {
   fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
 }
 
+async function downloadPan(url: string, file: string) {
+  const res = await fetch(url);
+  assert.equal(res.status, 200, url);
+  assert.equal(res.headers.get('content-type'), 'application/xml; charset=utf-8');
+  assert.match(res.headers.get('content-disposition') ?? '', /^attachment; filename="zkid-synthetic-test-pan-record-(adult|under-19)-[MFT]\.xml"$/);
+  fs.writeFileSync(file, await res.text());
+}
+
 before(async () => {
   execFileSync(process.execPath, [path.join(rpDir, 'vercel', 'build.mjs')], { stdio: 'inherit' });
   fs.cpSync(path.join(rpDir, '.vercel', 'output'), output, { recursive: true });
@@ -69,6 +80,9 @@ before(async () => {
   await download(`${A}/sample-qr.png?minor`, minorSample);
   await download(`${A}/sample-qr.png?age=adult&gender=F&pin=560034&state=Karnataka`, herSample);
   assert.equal((await fetch(`${A}/sample-qr.png?gender=X`)).status, 400);
+  await downloadPan(`${A}/sample-pan.xml`, panSample);
+  await downloadPan(`${A}/sample-pan.xml?age=minor`, panMinorSample);
+  assert.equal((await fetch(`${A}/sample-pan.xml?gender=X`)).status, 400);
   const playwright = await import(process.env.PLAYWRIGHT || 'playwright');
   browser = await (playwright.chromium ?? playwright.default.chromium).launch();
 });
@@ -91,10 +105,14 @@ async function contextOnce() {
 const { proveAt, proveViaRequestQr } = holderFlows(contextOnce, HOLDER, sample);
 let first: any;
 
-test("hosted: the holder's domain sends / to the holder app", async () => {
+test("hosted: the holder's domain sends / to the holder app, which is cross-origin isolated", async () => {
   const res = await fetch('http://localhost:4100/', { redirect: 'manual' });
   assert.equal(res.status, 302);
   assert.equal(res.headers.get('location'), '/holder/');
+  const holder = await fetch(HOLDER);
+  assert.equal(holder.headers.get('cross-origin-opener-policy'), 'same-origin');
+  assert.equal(holder.headers.get('cross-origin-embedder-policy'), 'require-corp');
+  assert.equal((await fetch(`${A}/`)).headers.get('cross-origin-embedder-policy'), null, 'the shops are not');
 });
 
 test("hosted: without the holder's address, every shop says what to set", async () => {
@@ -128,23 +146,48 @@ test('hosted: shop A still shows its account, and refuses a second one (NULLIFIE
   assert.equal(again.status.code, 'NULLIFIER_SEEN');
 });
 
-test('hosted: a sample QR of someone under 19 is stopped before proving', async () => {
+let panFirst: any;
+test('hosted: shop A accepts a proof from a sample PAN record, and shows which credential proved it', { timeout: PROOF_TIMEOUT }, async () => {
+  panFirst = await proveAt(A, panSample);
+  assert.match(panFirst.answer, /Accepted/);
+  assert.equal(panFirst.status.document, 'pan');
   const page = await (await contextOnce()).newPage();
   await page.goto(`${A}/`);
-  await page.click('[data-testid=verify]');
-  await page.waitForSelector('text=asks you to prove');
-  await page.setInputFiles('input[type=file]', minorSample);
-  assert.match(await page.textContent('[data-testid=error]'), /NOT_19/);
+  assert.match(await page.textContent('[data-testid=document]'), /PAN record/);
   await page.close();
 });
 
+test('T6.4 (hosted): a sample QR or PAN record of someone under 19 is stopped before proving', async () => {
+  for (const file of [minorSample, panMinorSample]) {
+    const page = await (await contextOnce()).newPage();
+    await page.goto(`${A}/`);
+    await page.click('[data-testid=verify]');
+    await openCredential(page, file);
+    assert.match(await page.textContent('[data-testid=error]'), /NOT_19/);
+    await page.close();
+  }
+});
+
 // Sets shop A's rules through its form, as a visitor does, whatever they were.
-async function setRulesAtA({ age19, genders = [], pin = '', states = [] }: { age19: boolean; genders?: string[]; pin?: string; states?: string[] }) {
+async function setRulesAtA({
+  documents = ['aadhaar', 'pan'],
+  age19,
+  genders = [],
+  pin = '',
+  states = [],
+}: {
+  documents?: string[];
+  age19: boolean;
+  genders?: string[];
+  pin?: string;
+  states?: string[];
+}) {
   const page = await (await contextOnce()).newPage();
   await page.goto(`${A}/`);
   const set = async (input: string, on: boolean) => {
     if ((await page.locator(input).isChecked()) !== on) await page.click(`label:has(${input})`);
   };
+  for (const d of ['aadhaar', 'pan']) await set(`input[name=document][value=${d}]`, documents.includes(d));
   await set('input[name=age19]', age19);
   for (const g of ['M', 'F', 'T']) await set(`input[name=gender][value=${g}]`, genders.includes(g));
   await page.fill('#pin', pin);
@@ -160,9 +203,16 @@ async function setRulesAtA({ age19, genders = [], pin = '', states = [] }: { age
 }
 
 test("hosted: rules a visitor gets wrong are not saved, and the page says why", async () => {
-  const res = await fetch(`${A}/rules`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'age19=on&pin=0123' });
+  const res = await fetch(`${A}/rules`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'document=aadhaar&age19=on&pin=0123' });
   assert.equal(res.status, 400);
   assert.match(await res.text(), /data-testid="rules-error"[^>]*>Those rules were not saved: rules\.pinCode has an invalid value: &#34;0123&#34;/);
+  const form = (body: string) => fetch(`${A}/rules`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
+  const pan = await form('document=aadhaar&document=pan&age19=on&state=Kerala');
+  assert.equal(pan.status, 400);
+  assert.match(await pan.text(), /Those rules were not saved: rules on PIN code or state need an Aadhaar QR: a PAN record has no address\./);
+  const none = await form('age19=on');
+  assert.equal(none.status, 400);
+  assert.match(await none.text(), /Those rules were not saved: accept at least one credential/);
 });
 
 test('T6.4 (hosted): a QR that breaks the rules is stopped before proving, and nothing is sent', async () => {
@@ -174,8 +224,7 @@ test('T6.4 (hosted): a QR that breaks the rules is stopped before proving, and n
   const page = await (await contextOnce()).newPage();
   await page.goto(`${A}/`);
   await page.click('[data-testid=verify]');
-  await page.waitForSelector('text=asks you to prove');
-  await page.setInputFiles('input[type=file]', sample); // a man
+  await openCredential(page, sample); // a man
   assert.match(await page.textContent('[data-testid=error]'), /accepts only these genders: Female\. Your QR shows Male.*GENDER_NOT_ACCEPTED/);
   await page.close();
   assert.equal(proofsPosted(), before, 'no proof was posted');
@@ -183,14 +232,13 @@ test('T6.4 (hosted): a QR that breaks the rules is stopped before proving, and n
 
 let ruled: any;
 test("hosted: a QR that meets a visitor's rules on gender, PIN code and state is accepted, and the shop shows what it learned", { timeout: PROOF_TIMEOUT }, async () => {
-  const chips = await setRulesAtA({ age19: true, genders: ['F', 'T'], pin: '5600xx, 110001', states: ['Karnataka', 'Kerala'] });
+  const chips = await setRulesAtA({ documents: ['aadhaar'], age19: true, genders: ['F', 'T'], pin: '5600xx, 110001', states: ['Karnataka', 'Kerala'] });
   assert.match(chips, /PIN: 5600xx \/ 110001/i);
   assert.match(chips, /State: Karnataka \/ Kerala/i);
   const holder = await (await contextOnce()).newPage();
   await holder.goto(`${A}/`);
   await holder.click('[data-testid=verify]');
-  await holder.waitForSelector('text=asks you to prove');
-  await holder.setInputFiles('input[type=file]', herSample);
+  await openCredential(holder, herSample);
   const shown = await holder.textContent('[data-testid=disclosure]');
   for (const value of ['19 or older', 'Female', '560034', 'Karnataka']) assert.ok(shown.includes(value), `${value} is shown before proving: ${shown}`);
   await holder.close();
@@ -205,7 +253,11 @@ test("hosted: a QR that meets a visitor's rules on gender, PIN code and state is
 });
 
 test('T6.1 (hosted, rules): every proof posted reveals the fields its rules name, and no other', () => {
-  const posts = captured.filter((r) => r.method === 'POST' && /\/zkid\/response\//.test(r.url)).map((r) => JSON.parse(r.body ?? '').publicSignals);
+  const posts = captured
+    .filter((r) => r.method === 'POST' && /\/zkid\/response\//.test(r.url))
+    .map((r) => JSON.parse(r.body ?? ''))
+    .filter((body) => body.document === 'aadhaar')
+    .map((body) => body.publicSignals);
   assert.ok(posts.length >= 2, `${posts.length} proofs posted`);
   const packed = (text: string) => [...Buffer.from(text, 'latin1')].reduceRight((v, b) => (v << 8n) | BigInt(b), 0n).toString();
   const last = posts.at(-1);
@@ -213,9 +265,9 @@ test('T6.1 (hosted, rules): every proof posted reveals the fields its rules name
   for (const signals of posts.slice(0, -1)) assert.deepEqual(signals.slice(3, 7), ['1', '0', '0', '0'], 'the age-only proofs reveal nothing else');
 });
 
-test('T6.3 (hosted): no request the browser made carries any part of either QR it proved with', () => {
+test('T6.3 (hosted): no request the browser made carries any part of the QRs or the PAN record it proved with', () => {
   assert.ok(captured.some((r) => r.url.includes('circuit_final_0.gz')), 'worker requests are captured');
-  const needles = [sample, herSample].flatMap((file) => qrNeedles(readQr(fs.readFileSync(file))));
+  const needles = [...[sample, herSample].flatMap((file) => qrNeedles(readQr(fs.readFileSync(file)))), ...panNeedles(fs.readFileSync(panSample, 'utf8'))];
   for (const r of captured) {
     for (const needle of needles) {
       assert.ok(!r.url.includes(needle) && !(r.body ?? '').includes(needle), `${r.method} ${r.url} carries part of the QR`);

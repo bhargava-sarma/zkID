@@ -1,20 +1,25 @@
 // Phase 6: the attacks docs/THREAT_MODEL.md says zkID does not defend, or only
 // partly, shown working with real proofs: T2.6, T3.1, T3.4, T4.2, T4.3, T5.2
-// and T5.3. A passing test here means the attack succeeds, as documented.
-// The defended rows are tested in the packages; docs/ATTACK_REPORT.md lists
-// them all.
+// and T5.3, and for PAN records T4.5, T5.6 and T5.7. A passing test here means
+// the attack succeeds, as documented. The defended rows are tested in the
+// packages; docs/ATTACK_REPORT.md lists them all.
 //
-// Every QR is synthetic, signed with an ephemeral test key. Run: npm test (the
-// circuit artifacts must be fetched: cd ../packages/circuit && npm run fetch).
+// Every QR and PAN record is synthetic, signed with an ephemeral test key. Run:
+// npm test (the circuit artifacts must be fetched: cd ../packages/circuit &&
+// npm run fetch; packages/pan must be installed).
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { MemoryStore, close, createVerifier, nullifierSeedFor, signalHashFor, type ProofRequest, type VerifyResult } from '../../packages/verifier-sdk/src/index.ts';
+import { MemoryStore, close, createVerifier, nullifierSeedFor, panDobCutoff, signalHashFor, type ProofRequest, type VerifyResult } from '../../packages/verifier-sdk/src/index.ts';
 import { testRegistry } from '../../packages/issuer-registry/index.ts';
 import { DEFAULT_DIR, buildInput, close as closeCircuit, keyHash, prove, witness } from '../../packages/circuit/index.mjs';
 import { makeSyntheticSecureQr, syntheticFields, syntheticPhoto, unknownTrailer } from '../../packages/secure-qr/synthetic.mjs';
+import { circuitInput, expectedOutputs } from '../../packages/pan/input.mjs';
+import { prove as provePan } from '../../packages/pan/prove.mjs';
+import { readRecord } from '../../packages/pan/record.mjs';
+import { istStamp, makeRecord, testIssuer as panTestIssuer, testKey as panTestKey } from '../../packages/pan/synthetic.mjs';
 
 const ARTIFACTS = process.env.AA_ARTIFACTS || DEFAULT_DIR;
 const HAVE_ARTIFACTS = ['aadhaar-verifier.wasm', 'circuit_final.zkey'].every((f) => fs.existsSync(path.join(ARTIFACTS, f)));
@@ -31,9 +36,14 @@ const ISSUED_AT = G + 600; // when the verifiers made their requests
 const VERIFY_AT = ISSUED_AT + 60;
 const MAX_AGE = 7 * 86400;
 
-// UIDAI stand-in: an ephemeral key, trusted by the verifiers through a test registry.
+// UIDAI and DigiLocker stand-ins: ephemeral keys, trusted by the verifiers
+// through a test registry, the second for PAN records only.
 const issuer = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
-const registry = testRegistry([{ id: 'test-key', publicKey: issuer.publicKey, keyHash: keyHash(issuer.publicKey) }]);
+const digilocker = panTestIssuer();
+const registry = testRegistry([
+  { id: 'test-key', publicKey: issuer.publicKey, keyHash: keyHash(issuer.publicKey) },
+  { id: 'test-pan-key', publicKey: digilocker.publicKey, document: 'pan' },
+]);
 
 // The holder's QR. Each test changes only what its attack needs.
 const photo = syntheticPhoto(900);
@@ -42,23 +52,39 @@ const qr = ({ version = 'V5', photoBytes = photo, trailingBytes = trailing, fiel
   makeSyntheticSecureQr(issuer.privateKey, { version, photo: photoBytes, trailing: trailingBytes, fields: syntheticFields({ generatedAt: new Date(G * 1000), ...fields }) }).text;
 
 type Proof = { proof: unknown; publicSignals: string[] };
+type PanProof = { proof: string; publicInputs: string[] };
 const requests: Record<string, ProofRequest> = {};
 const proofs: Record<string, Proof> = {};
+const panProofs: Record<string, PanProof> = {};
+// The holder's PAN record, verified by "DigiLocker" when the QRs were generated.
+let panRecord: unknown;
 
 // Anyone holding a QR can make this proof: the QR, the request and UIDAI's public key are all it takes.
 const proveFor = async (text: string, request: ProofRequest): Promise<Proof> =>
   prove(buildInput(text, issuer.publicKey, { nullifierSeed: await nullifierSeedFor(request.verifierId), signalHash: await signalHashFor(request) }), { dir: ARTIFACTS });
 
+// The same for a PAN record: the record, the request and DigiLocker's public key.
+const provePanFor = async (record: unknown, request: ProofRequest): Promise<PanProof> => {
+  const input = circuitInput(record, { dobCutoff: panDobCutoff(request.issuedAt), nullifierSeed: await nullifierSeedFor(request.verifierId), signalHash: await signalHashFor(request) });
+  const { proof, publicInputs } = await provePan(input, { threads: 4 });
+  return { proof: Buffer.from(proof).toString('base64'), publicInputs };
+};
+
 before(async () => {
   if (!HAVE_ARTIFACTS) return;
+  // Both sites accept either credential.
   const [atA, atB] = [A, B].map((verifierId) => createVerifier({ verifierId, registry, now: () => ISSUED_AT }));
-  for (const name of ['a1', 'a2', 'a3', 'a4']) requests[name] = await atA.createRequest({ maxAgeSeconds: MAX_AGE });
-  requests.b1 = await atB.createRequest({ maxAgeSeconds: MAX_AGE });
+  const ask = (site: typeof atA) => site.createRequest({ maxAgeSeconds: MAX_AGE, documents: ['aadhaar', 'pan'] });
+  for (const name of ['a1', 'a2', 'a3', 'a4', 'a5']) requests[name] = await ask(atA);
+  for (const name of ['b1', 'b2']) requests[name] = await ask(atB);
   proofs.holderA = await proveFor(qr(), requests.a1); // the holder, at A
   proofs.lentA = await proveFor(qr(), requests.a2); // someone else, with a copy of the holder's QR, at A
   proofs.newPhotoA = await proveFor(qr({ photoBytes: syntheticPhoto(900) }), requests.a3); // the holder after a photo update
   proofs.longerA = await proveFor(qr({ fields: { street: 'TEST STREET2' } }), requests.a4); // after an address update: one byte longer
   proofs.holderB = await proveFor(qr(), requests.b1); // the holder, at B
+  panRecord = await readRecord(await makeRecord(digilocker, { verifiedOn: istStamp(new Date(G * 1000)) }), [panTestKey(digilocker, 'test-pan-key')]);
+  panProofs.holderA = await provePanFor(panRecord, requests.a5); // the holder's PAN record, at A
+  panProofs.holderB = await provePanFor(panRecord, requests.b2); // and at B
 });
 
 // A verifier at `verifierId` that issued the given requests; one per test, so each starts with no accounts.
@@ -72,6 +98,7 @@ const accepted = (result: VerifyResult) => {
   return result;
 };
 const signal = (p: Proof, name: 'pubkeyHash' | 'nullifier' | 'timestamp') => p.publicSignals[{ pubkeyHash: 0, nullifier: 1, timestamp: 2 }[name]];
+const panInput = (p: PanProof, name: 'pubkeyHash' | 'nullifier' | 'verifiedHour') => BigInt(p.publicInputs[{ pubkeyHash: 3, nullifier: 4, verifiedHour: 5 }[name]]).toString();
 
 test("T2.6: a victim's proof answers the attacker's request, and the attacker's session gets the account (A2.5)", NEEDS_PROOFS, async () => {
   // The attacker opens a session at A and relays A's request a1 to the victim,
@@ -143,4 +170,30 @@ test('T5.3: the same QR at two sites shows the same generation hour and key hash
   assert.notEqual(atA.nullifier, atB.nullifier); // unlinkable by nullifier (T5.1)...
   assert.equal(signal(proofs.holderA, 'timestamp'), signal(proofs.holderB, 'timestamp')); // ...but not by these
   assert.equal(signal(proofs.holderA, 'pubkeyHash'), signal(proofs.holderB, 'pubkeyHash'));
+});
+
+test('T4.5: one person with an Aadhaar QR and a PAN record gets two accounts at a site that accepts both (A4.7)', NEEDS_PROOFS, async () => {
+  // The two circuits' nullifiers hash different values (the QR's photo bytes;
+  // the PAN and DigiLocker's uid), and no value both can see ties them.
+  const site = verifier(A, [requests.a1, requests.a5]);
+  const viaQr = accepted(await site.verify(proofs.holderA.proof, proofs.holderA.publicSignals, requests.a1, 'aadhaar'));
+  const viaPan = accepted(await site.verify(panProofs.holderA.proof, panProofs.holderA.publicInputs, requests.a5, 'pan'));
+  assert.equal(viaQr.newNullifier && viaPan.newNullifier, true, 'two accounts');
+  assert.notEqual(viaQr.nullifier, viaPan.nullifier);
+});
+
+test("T5.6: anyone with a copy of the PAN record computes the holder's nullifier at any site, offline (A5.2)", NEEDS_PROOFS, async () => {
+  // The record holds the PAN and DigiLocker's uid, which is all the nullifier
+  // takes besides the site's public seed.
+  const atB = accepted(await verifier(B, [requests.b2]).verify(panProofs.holderB.proof, panProofs.holderB.publicInputs, requests.b2, 'pan'));
+  const offline = expectedOutputs(panRecord, { dobCutoff: 0, nullifierSeed: await nullifierSeedFor(B) });
+  assert.equal(offline.nullifier, atB.nullifier);
+});
+
+test('T5.7: the same PAN record at two sites shows the same verification hour and key hash, so colluding sites can match it (A5.3, A6.3)', NEEDS_PROOFS, async () => {
+  const atA = accepted(await verifier(A, [requests.a5]).verify(panProofs.holderA.proof, panProofs.holderA.publicInputs, requests.a5, 'pan'));
+  const atB = accepted(await verifier(B, [requests.b2]).verify(panProofs.holderB.proof, panProofs.holderB.publicInputs, requests.b2, 'pan'));
+  assert.notEqual(atA.nullifier, atB.nullifier); // unlinkable by nullifier (T5.5)...
+  assert.equal(panInput(panProofs.holderA, 'verifiedHour'), panInput(panProofs.holderB, 'verifiedHour')); // ...but not by these
+  assert.equal(panInput(panProofs.holderA, 'pubkeyHash'), panInput(panProofs.holderB, 'pubkeyHash'));
 });

@@ -23,14 +23,16 @@ credentials with it. It was the only issuer the v1 verifier page and the v1
   ([`packages/issuer-registry`](packages/issuer-registry/README.md)) refuses it
   in every registry (`COMPROMISED_KEY`, covered by its tests).
 - v1's verifier page and its trusted-issuer list are removed from this branch.
-  v2 trusts only UIDAI's Secure QR keys, from the issuer registry.
+  v2 trusts only UIDAI's Secure QR keys and DigiLocker's document-signing key
+  (for PAN records), from the issuer registry.
 - Test keys are generated in memory where they are used (the tests and the
   local demo's setup) and their private halves are never written to disk; v1's
   test issuer is removed from this branch. The one exception is the hosted
-  demo's TEST key: `apps/demo-rp/vercel/build.mjs` makes one per deployment and
-  writes its private half into that deployment's function (through the ignored
-  `apps/demo-rp/.build/`), which signs synthetic sample QRs with it. Only that
-  deployment's demo shops and holder build trust it. `.gitignore`
+  demo's TEST keys: `apps/demo-rp/vercel/build.mjs` makes two per deployment
+  (one for QRs, one for PAN records) and writes their private halves into that
+  deployment's function (through the ignored `apps/demo-rp/.build/`), which
+  signs synthetic sample QRs and PAN records with them. Only that deployment's
+  demo shops and holder build trust them. `.gitignore`
   excludes `*.pem`, `*.key`, `*.p12` and `*.pfx`;
   [`tools/repo-checks/no_private_keys.test.mjs`](tools/repo-checks/no_private_keys.test.mjs)
   fails if a tracked file holds a private key.
@@ -92,6 +94,13 @@ rebuilt from source and the Hermez powers of tau passes
 ceremony ran as recorded, not that any participant was honest; proofs stay
 sound only if at least one of them destroyed their secret.
 
+PAN records are proved with zkID's own circuit and UltraHonk, which has no
+circuit-specific setup: it uses the points of Aztec's Ignition ceremony, sound
+under the same condition for that ceremony. The verifier embeds the one point
+its check relies on, and Barretenberg checks it against the hash it pins
+([docs/circuit-spec.md](docs/circuit-spec.md), section 7). The PAN circuit is
+new and has not been reviewed outside this project.
+
 ## 4. Other v1 problems, not fixed by removing the key
 
 From the overhaul audit. They apply to v1 (the tag and the live v1 site). On
@@ -124,6 +133,8 @@ this branch the code behind them is removed; what replaces it is described in
   The hosted demo's shops keep per-site codes (nullifiers) and sessions in
   Redis, for at most 7 days ([docs/DECISIONS.md](docs/DECISIONS.md), section 9).
 - **The server sees the whole card at issuance**, and `/api/issue-credential`
-  returns the raw ID number to the browser. *This branch:* the QR is read and
-  proved on the holder's device, and only the proof is sent (test T6.3, an
-  end-to-end run that inspects every request the browser makes).
+  returns the raw ID number to the browser. *This branch:* the QR or PAN record
+  is read and proved on the holder's device, and only the proof is sent (test
+  T6.3, an end-to-end run that inspects every request the browser makes).
+  Real QRs and PAN records used in development stay out of git; the tests that
+  take real PAN records (`PAN_XML`) print only pass or fail.

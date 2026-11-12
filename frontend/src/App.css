@@ -293,6 +293,18 @@ h2 {
   background: #ff6a24;
 }
 
+/* The credential choice: two keys side by side; the chosen one is lit. */
+.choice {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.choice .key {
+  width: 100%;
+  margin-top: 0;
+}
+
 .key--file {
   width: 100%;
   position: relative;

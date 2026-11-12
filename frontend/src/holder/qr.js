@@ -11,12 +11,12 @@ import { HolderError } from './errors.js';
 // mode (npm run dev:demo, npm run build:demo); null in every other build.
 const demoKeys = typeof __ZKID_DEMO_KEYS__ === 'undefined' ? null : __ZKID_DEMO_KEYS__;
 
-// The issuer keys this app accepts: UIDAI's, from the issuer registry, and in a
-// demo build the demo's test key. A production build has no test key
+// The issuer keys this app accepts for a QR: UIDAI's, from the issuer registry,
+// and in a demo build the demo's test key. A production build has no test key
 // (THREAT_MODEL A1.4).
 export async function trustedKeys() {
-  const keys = registry.keys.map(({ id, subject, modulus, notBefore, notAfter }) => ({ id, label: subject, modulus, notBefore, notAfter }));
-  if (demoKeys) keys.push(...demoKeys);
+  const keys = registry.keys.filter((k) => k.document === 'aadhaar').map(({ id, subject, modulus, notBefore, notAfter }) => ({ id, label: subject, modulus, notBefore, notAfter }));
+  if (demoKeys) keys.push(...demoKeys.filter((k) => (k.document ?? 'aadhaar') === 'aadhaar'));
   return Promise.all(keys.map(async (k) => ({ ...k, cryptoKey: await importRsaKey(k.modulus) })));
 }
 
